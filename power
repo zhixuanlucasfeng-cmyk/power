@@ -1,0 +1,21 @@
+#!/bin/sh
+# Power launcher: Claude Code on your own subscription login, with the Power plugin,
+# Claude in Chrome, and a dedicated workspace (~/.power) holding persona + learned skills.
+#   power            interactive session
+#   power -c         continue the last session
+#   power app        open the Power Mac app (builds it on first run)
+set -e
+DIR=$(cd "$(dirname "$(readlink -f "$0")")" && pwd)
+export POWER_HOME="${POWER_HOME:-$HOME/.power}"
+
+mkdir -p "$POWER_HOME/.claude/skills"
+# First run only: never overwrite the user's edits.
+[ -f "$POWER_HOME/CLAUDE.md" ] || cp "$DIR/persona.md" "$POWER_HOME/CLAUDE.md"
+[ -d "$DIR/node_modules" ] || (cd "$DIR" && npm install --silent)
+
+if [ "$1" = app ]; then
+  [ -d "$HOME/Applications/Power.app" ] || "$DIR/mac/build.sh"
+  open "$HOME/Applications/Power.app"; exit 0
+fi
+cd "$POWER_HOME"
+exec claude --chrome --plugin-dir "$DIR" "$@"

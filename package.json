@@ -1,0 +1,32 @@
+{
+  "name": "power",
+  "version": "0.4.0",
+  "description": "Your agents, one room: Claude Code, Codex, Hermes, opencode and every agent CLI on your Mac in one desktop app, with group chat, persona packs and Obsidian memory.",
+  "scripts": {
+    "test": "node --test"
+  },
+  "keywords": [
+    "claude-code",
+    "codex",
+    "mcp",
+    "ai-agents",
+    "multi-agent",
+    "group-chat",
+    "obsidian",
+    "macos"
+  ],
+  "author": "zhixuanlucasfeng-cmyk",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=22.19"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "zod": "^4.6.5"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/zhixuanlucasfeng-cmyk/power"
+  }
+}

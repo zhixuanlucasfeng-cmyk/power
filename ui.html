@@ -1,0 +1,692 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Power</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Zen+Kaku+Gothic+New:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  /* Typhoon night, neon cafe, festival fireworks: a Reze-arc mood. */
+  :root {
+    --night:#0a0c18; --ink:#11142499; --ink2:#161a2e; --line:#2a2f4d; --text:#ece8f4; --dim:#8f8cab;
+    --bomb:#ff5a36; --pink:#ff4f9a; --violet:#8b6cff; --c:#e2283c;
+    --display:'Dela Gothic One', sans-serif;
+    --cjk:'PingFang SC', 'Hiragino Sans GB', 'Zen Kaku Gothic New', sans-serif;
+    --body:'Zen Kaku Gothic New', -apple-system, 'PingFang SC', sans-serif;
+    --mono:'JetBrains Mono', ui-monospace, Menlo, monospace;
+  }
+  * { box-sizing:border-box; }
+  html, body { height:100%; }
+  body {
+    margin:0; display:grid; grid-template-columns:280px 1fr; color:var(--text); font:15px/1.6 var(--body);
+    background:
+      radial-gradient(900px 500px at 75% -10%, color-mix(in srgb, var(--c) 22%, transparent), transparent 70%),
+      radial-gradient(700px 400px at 10% 110%, #ff4f9a22, transparent 70%),
+      linear-gradient(180deg, #0d1022 0%, var(--night) 60%);
+    transition: background .6s;
+    overflow:hidden;
+  }
+  /* rain */
+  body::before {
+    content:''; position:fixed; inset:-50% -10%; pointer-events:none; z-index:0; opacity:.5;
+    background-image:
+      repeating-linear-gradient(105deg, transparent 0 22px, #9fb7ff14 22px 23px, transparent 23px 61px),
+      repeating-linear-gradient(105deg, transparent 0 37px, #9fb7ff0d 37px 38px, transparent 38px 90px);
+    animation: rain .55s linear infinite;
+  }
+  @keyframes rain { to { transform: translate(-60px, 160px); } }
+  @media (prefers-reduced-motion: reduce) { body::before { animation:none; } }
+  aside, main, #mem, #pact { position:relative; z-index:1; min-height:0; }
+
+  aside, #mem, #pact { background:var(--ink); backdrop-filter: blur(14px); display:flex; flex-direction:column; border-right:1px solid var(--line); }
+  #mem { border-right:0; border-left:1px solid var(--line); display:none; }
+  body.memopen { grid-template-columns:280px 1fr 300px; }
+  body.memopen #mem { display:flex; }
+  #pact { border-left:1px solid var(--line); display:none; overflow:hidden; }
+  body.pactopen { grid-template-columns:280px 1fr 320px; }
+  body.pactopen #pact { display:flex; }
+  header .ctl { flex-wrap:wrap; justify-content:flex-end; row-gap:6px; }
+  header .ctl button, header .ctl select { white-space:nowrap; }
+  header .who { min-width:0; } header .who b { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; display:block; }
+  #pactt.on { border-color:var(--c); color:var(--text); box-shadow:0 0 14px -6px var(--c); }
+  #pactbody { overflow:auto; flex:1; padding:0 14px 14px; }
+  .pact { border:1px solid var(--line); border-radius:10px; padding:8px 10px; margin-bottom:6px; background:#ffffff05; }
+  .pact b { font:600 13px var(--mono); } .pact small { display:block; color:var(--dim); font-size:12px; }
+  .pact .pv { font:11px var(--mono); color:var(--dim); margin-top:3px; } .pact.off { opacity:.4; }
+  .seal { text-align:center; padding:14px 6px 10px; } .seal b { display:block; font:28px var(--display); color:var(--c); } .seal small { color:var(--dim); }
+  #memt.on { border-color:var(--c); color:var(--text); box-shadow:0 0 14px -6px var(--c); }
+  .herologo { display:block; width:min(520px, 80%); margin:0 auto; filter:drop-shadow(0 0 28px color-mix(in srgb, var(--c) 50%, transparent)); }
+  .logo img { display:block; width:100%; max-width:230px; filter:drop-shadow(0 0 14px color-mix(in srgb, var(--c) 45%, transparent)); }
+  .logo { padding:18px 18px 6px; font:28px/1 var(--display); letter-spacing:2px; color:var(--c); text-shadow:0 0 18px color-mix(in srgb, var(--c) 60%, transparent); transition:color .4s; }
+  .tag { padding:0 18px 14px; color:var(--dim); font-size:12px; letter-spacing:1px; }
+  .sec { padding:10px 18px 6px; font:700 12px var(--cjk); letter-spacing:2px; color:var(--dim); display:flex; justify-content:space-between; align-items:center; }
+
+  .badge { flex:none; width:40px; height:40px; border-radius:12px; display:grid; place-items:center; font:800 20px var(--cjk); color:#fff;
+    background: linear-gradient(145deg, var(--k), color-mix(in srgb, var(--k) 35%, #000)); box-shadow: inset 0 0 0 1px #ffffff22; }
+  .badge { position:relative; overflow:hidden; }
+  .badge img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+  .card .badge { cursor:copy; }
+  .badge.sm { width:30px; height:30px; font-size:15px; border-radius:9px; }
+
+  .ch { display:flex; gap:10px; align-items:center; padding:8px; border-radius:14px; cursor:pointer; border:1px solid transparent; transition:.2s; }
+  .ch:hover { background:#ffffff08; }
+  .ch.on { border-color:color-mix(in srgb, var(--k) 70%, transparent); background:color-mix(in srgb, var(--k) 14%, transparent); box-shadow:0 0 22px -6px var(--k); }
+  .ch b { display:block; font-weight:700; }
+  .ch small { color:var(--dim); font-size:12px; }
+
+  button { font:inherit; color:var(--text); background:#ffffff0d; border:1px solid var(--line); border-radius:10px; padding:5px 10px; cursor:pointer; }
+  button:hover { border-color:#4a5180; }
+  #tree { overflow:auto; flex:1; padding:0 10px 16px; }
+  .ch .who2 { flex:1; min-width:0; } .ch .car { color:var(--dim); font-size:11px; }
+  .kids { margin:2px 0 8px 22px; border-left:1px solid color-mix(in srgb, var(--k) 40%, transparent); padding-left:6px; }
+  .proj { display:flex; align-items:center; justify-content:space-between; gap:6px; padding:5px 8px; border-radius:8px; cursor:pointer; font-size:13.5px; white-space:nowrap; }
+  .proj span:first-child { overflow:hidden; text-overflow:ellipsis; }
+  .proj:hover, .proj.on { background:#ffffff0d; }
+  .proj .acts { display:none; gap:4px; color:var(--dim); } .proj:hover .acts { display:flex; }
+  .proj .acts i { font-style:normal; padding:0 5px; border-radius:5px; } .proj .acts i:hover { background:#ffffff1a; color:var(--text); }
+  .proj.add { color:var(--dim); font-size:12.5px; }
+  .kids .th { padding-left:26px; font-size:13px; }
+  .mini { padding:1px 7px; font-size:11px; border-radius:7px; letter-spacing:0; }
+  .stack { display:inline-flex; margin-right:7px; vertical-align:middle; }
+  .stack .badge.sm { width:20px; height:20px; font-size:10px; border-radius:6px; margin-right:-6px; box-shadow:0 0 0 2px var(--ink2); }
+  .stack.big .badge.sm { width:30px; height:30px; font-size:14px; border-radius:9px; margin-right:-10px; }
+  .stack.big { margin-right:14px; }
+  .th.grp { display:flex; align-items:center; }
+  .ren { width:100%; font:inherit; color:var(--text); background:#06070f; border:1px solid var(--c); border-radius:6px; padding:2px 6px; outline:0; }
+  .model.final { border-color:var(--k); color:var(--k); margin-left:4px; }
+  .card.pickg { position:relative; opacity:.55; } .card.pickg.on { opacity:1; }
+  .card .ord { position:absolute; top:6px; right:8px; font:normal 11px var(--body); color:var(--k); }
+  body.norain::before { display:none; }
+  .tag { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+  .settings { max-width:760px; margin:0 auto; padding-bottom:30px; }
+  .settings h2 { font:800 16px var(--cjk); margin:26px 0 10px; } .settings h2 small { font:400 12px var(--body); color:var(--dim); margin-left:8px; }
+  .scard { border:1px solid var(--line); border-radius:14px; background:#ffffff05; overflow:hidden; }
+  .srow { display:flex; align-items:center; gap:12px; padding:10px 14px; border-top:1px solid var(--line); }
+  .srow:first-child { border-top:0; }
+  .sinfo { flex:1; min-width:0; } .sinfo b { display:block; font-size:14px; } .sinfo small { color:var(--dim); font-size:12px; }
+  .sinfo code { font-size:11px; }
+  .sgroup { color:var(--dim); font-size:12px; margin:14px 2px 6px; letter-spacing:1px; }
+  .sbar { display:flex; gap:8px; margin-bottom:4px; }
+  .sform { display:grid; gap:8px; padding:12px; } .sform input { padding:8px 11px; border-radius:9px; border:1px solid var(--line); background:#06070f; color:var(--text); font:inherit; }
+  .sform button { justify-self:end; }
+  .danger { border-color:#ff5a3660; color:#ff8a6a; }
+  .sw { position:relative; width:40px; height:22px; flex:none; } .sw input { opacity:0; width:0; height:0; }
+  .sw span { position:absolute; inset:0; border-radius:22px; background:#2a2f4d; transition:.2s; cursor:pointer; }
+  .sw span::before { content:''; position:absolute; width:16px; height:16px; left:3px; top:3px; border-radius:50%; background:#fff; transition:.2s; }
+  .sw input:checked + span { background:var(--c); } .sw input:checked + span::before { transform:translateX(18px); }
+  .gctl { display:flex; gap:10px; justify-content:center; margin-top:22px; }
+  #gstart { background:linear-gradient(135deg, var(--bomb), var(--pink)); border:0; color:#fff; font-weight:700; padding:8px 18px; }
+  #gstart:disabled { opacity:.4; cursor:default; }
+  .th { padding:7px 10px; border-radius:10px; cursor:pointer; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:var(--dim); font-size:14px; }
+  .th:hover { background:#ffffff08; } .th.on { background:#ffffff12; color:var(--text); }
+  .th .dot { display:inline-block; width:7px; height:7px; border-radius:50%; background:var(--bomb); margin-right:7px; box-shadow:0 0 8px var(--bomb); animation:blink .8s infinite alternate; }
+  @keyframes blink { to { opacity:.2; } }
+
+  main { display:flex; flex-direction:column; min-width:0; }
+  header { display:flex; align-items:center; gap:12px; padding:12px max(20px, calc(50% - 400px)); border-bottom:1px solid var(--line); background:#0a0c1880; backdrop-filter:blur(10px); }
+  header .who b { font:800 18px var(--cjk); letter-spacing:1px; }
+  header .who small { display:block; color:var(--dim); font-size:12px; }
+  header .ctl { margin-left:auto; display:flex; gap:8px; }
+  select { font:13px var(--body); color:var(--text); background:#ffffff0d; border:1px solid var(--line); border-radius:10px; padding:6px 8px; }
+  select option { background:var(--ink2); }
+
+  #chat { flex:1; overflow:auto; padding:26px max(20px, calc(50% - 400px)) 10px; scroll-behavior:smooth; }
+  .row { display:flex; gap:12px; margin:0 0 20px; animation:in .25s ease-out; }
+  @keyframes in { from { opacity:0; transform:translateY(6px); } }
+  .row .body { min-width:0; flex:1; }
+  .name { font-size:12.5px; color:var(--dim); margin-bottom:2px; }
+  .name b { color:var(--k); font-weight:700; margin-right:6px; }
+  .model { font:11px var(--mono); padding:1px 6px; border-radius:6px; border:1px solid var(--line); color:var(--dim); }
+  .urow { display:flex; gap:10px; justify-content:flex-end; align-items:flex-start; margin:0 0 20px; }
+  .urow .user { margin:0; }
+  .user { margin:0 0 20px auto; max-width:78%; width:fit-content; padding:10px 15px; border-radius:16px 16px 4px 16px; white-space:pre-wrap;
+    background:linear-gradient(135deg, #2a2f55, #1e2240); border:1px solid #3a4070; }
+  .text p { margin:.35em 0; } .text ul { margin:.3em 0; padding-left:1.3em; }
+  .text pre { background:#06070f; border:1px solid var(--line); padding:12px; border-radius:10px; overflow:auto; }
+  code { font:12.5px var(--mono); } .text :not(pre)>code { background:#ffffff12; padding:1px 6px; border-radius:5px; }
+  a { color:var(--pink); }
+  details.tool { border:1px solid var(--line); border-left:3px solid var(--k); border-radius:10px; margin:6px 0; background:#0b0e1d; }
+  details.tool summary { padding:6px 10px; cursor:pointer; color:var(--dim); font-size:13px; list-style:none; }
+  details.tool summary::-webkit-details-marker { display:none; }
+  .ok { color:#6fe0a8; } .bad { color:var(--bomb); }
+  details.tool pre { margin:0; padding:8px 10px; border-top:1px solid var(--line); max-height:260px; overflow:auto; white-space:pre-wrap; font:12px var(--mono); color:#c9c6dc; }
+  .think { color:var(--dim); font-size:13px; display:flex; align-items:center; gap:8px; }
+  .think i { width:8px; height:8px; border-radius:50%; background:var(--k); box-shadow:0 0 10px var(--k); animation:blink .6s infinite alternate; }
+  .meta { color:var(--dim); font-size:12px; }
+  .err { color:var(--bomb); white-space:pre-wrap; }
+
+  #composer { padding:10px max(20px, calc(50% - 400px)) 18px; }
+  #box { border:1px solid var(--line); border-radius:18px; background:#0d1022cc; padding:10px 10px 10px 16px; display:flex; gap:10px; align-items:flex-end; transition:.2s; }
+  #box:focus-within { border-color:color-mix(in srgb, var(--c) 70%, transparent); box-shadow:0 0 30px -10px var(--c); }
+  textarea { flex:1; resize:none; border:0; outline:0; background:transparent; color:var(--text); font:15px/1.5 var(--body); min-height:26px; max-height:220px; padding:6px 0; }
+  #send { flex:none; font:15px 'Dela Gothic One', 'PingFang SC', sans-serif; letter-spacing:1px; color:#fff; border:0; padding:10px 18px; border-radius:12px;
+    background:linear-gradient(135deg, var(--bomb), var(--pink)); box-shadow:0 6px 20px -6px var(--bomb); }
+  #send.stop { background:#3a3f63; box-shadow:none; }
+  .hint { color:var(--dim); font-size:11.5px; text-align:center; margin-top:6px; }
+
+  /* boom flash on send */
+  #boom { position:fixed; inset:0; pointer-events:none; z-index:5; opacity:0; background:radial-gradient(circle at var(--x, 70%) var(--y, 90%), #ff8a3dcc, #ff4f9a55 18%, transparent 45%); }
+  #boom.go { animation:boom .6s ease-out; }
+  @keyframes boom { 0% { opacity:.9; } 100% { opacity:0; } }
+
+  #dir { font-size:13px; max-width:260px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  #mem input { margin:0 14px 10px; padding:8px 12px; border-radius:10px; border:1px solid var(--line); background:#06070f; color:var(--text); font:inherit; }
+  #memlist { overflow:auto; flex:1; padding:0 14px 14px; }
+  .m { padding:9px 30px 9px 11px; border:1px solid var(--line); border-radius:10px; margin-bottom:6px; font-size:13.5px; position:relative; background:#ffffff05; }
+  .m small { color:var(--dim); display:block; font-size:11.5px; }
+  .m .x { position:absolute; top:5px; right:5px; border:0; background:none; color:var(--dim); padding:2px 6px; }
+  .m .x:hover { color:var(--bomb); }
+
+  .hero { text-align:center; margin-top:12vh; }
+  .hero h1 { font:clamp(42px, 7vw, 76px)/1 var(--display); margin:0; letter-spacing:4px; color:var(--c);
+    text-shadow:0 0 30px color-mix(in srgb, var(--c) 55%, transparent), 4px 4px 0 #00000080; }
+  .hero p { color:var(--dim); margin:10px 0 26px; }
+  .cards { display:flex; gap:10px; justify-content:center; flex-wrap:wrap; }
+  .card { width:138px; padding:14px 10px; border-radius:16px; border:1px solid var(--line); background:#ffffff06; cursor:pointer; transition:.2s; }
+  .card:hover, .card.on { border-color:var(--k); box-shadow:0 0 26px -8px var(--k); transform:translateY(-2px); }
+  .card .badge { margin:0 auto 8px; width:54px; height:54px; font-size:26px; border-radius:16px; }
+  .card b { display:block; } .card small { color:var(--dim); font-size:12px; }
+
+  @media (max-width: 1000px) { body, body.memopen, body.pactopen { grid-template-columns:1fr; } aside, #mem, #pact, body.memopen #mem, body.pactopen #pact { display:none; } }
+</style>
+</head>
+<body>
+<aside>
+  <div class="logo"><img src="/avatar/logo" alt="POWER" onerror="this.outerHTML='POWER'"></div>
+  <div class="tag">你的私人 Agent 小队 <button id="gear" class="mini" title="设置">⚙️ 设置</button></div>
+  <div id="tree"></div>
+</aside>
+<main>
+  <header>
+    <span class="badge" id="hb"></span>
+    <div class="who"><b id="hn"></b><small id="hr"></small></div>
+    <div class="ctl">
+      <button id="dir" title="工作文件夹：它们能读写这里的文件"></button>
+      <button id="new" title="在当前项目里开新对话">＋ 新对话</button>
+      <select id="model" title="模型"></select>
+      <select id="effort" title="思考深度">
+        <option value="low">思考 · 低</option><option value="medium">思考 · 中</option>
+        <option value="high">思考 · 高</option><option value="xhigh">思考 · 很高</option><option value="max">思考 · 最大</option>
+      </select>
+      <button id="memt" title="打开 / 收起记忆本">🧠 记忆本</button>
+      <button id="pactt" title="恶魔契约：Contract 工具网关">📜 契约</button>
+    </div>
+  </header>
+  <div id="chat"></div>
+  <div id="composer">
+    <div id="box">
+      <textarea id="input" rows="1" placeholder="说吧…"></textarea>
+      <button id="send">BOOM</button>
+    </div>
+    <div class="hint" id="hint"></div>
+  </div>
+</main>
+<section id="mem">
+  <div class="sec" style="padding-top:20px">记忆本</div>
+  <input id="q" placeholder="搜索它记得的事…">
+  <div id="memlist"></div>
+</section>
+<section id="pact">
+  <div class="sec" style="padding-top:20px">恶魔契约</div>
+  <div id="pactbody"></div>
+</section>
+<div id="boom"></div>
+<script>
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]));
+const LOOK = { me: { k:'#ffb21e', g:'我' } }; // characters bring their own colors in the persona pack
+let META, cur = null, busy = false, dir = localStorage.getItem('dir') || '';
+let char = localStorage.getItem('char') || '';
+let PROJECTS = {}, THREADS = [], folderCb = null;
+let group = null; // { members, rounds } while in a group chat
+const open_ = new Set((() => { try { return JSON.parse(localStorage.getItem('open')) || []; } catch { return []; } })());
+const prefs = (() => { try { return JSON.parse(localStorage.getItem('prefs')) || {}; } catch { return {}; } })();
+let av = Date.now(); // bump to reload pictures after an upload
+const badge = (c, sm) => `<span class="badge${sm ? ' sm' : ''}" style="--k:${look(c).k}">${look(c).g}<img src="/avatar/${c}?v=${av}" alt="" onerror="this.remove()"></span>`;
+const modelName = (m) => META.models[m] || m;
+const nm = (c) => { const x = META.chars[c]; return !x ? c : x.name === x.zh ? x.name : `${x.name} (${x.zh})`; };
+function look(c) {
+  if (META?.chars[c]?.look) return META.chars[c].look;
+  if (c === 'me') return { k: LOOK.me.k, g: (META?.settings.userName || '我').charAt(0) };
+  if (LOOK[c]) return LOOK[c];
+  let h = 0; for (const ch of c) h = (h * 31 + ch.charCodeAt(0)) % 360;
+  const n = META?.chars[c]?.name ?? c;
+  return { k: `hsl(${h} 65% 62%)`, g: n.replace(/^Ollama · /, '').charAt(0).toUpperCase() };
+}
+const visible = () => Object.entries(META.chars).filter(([, x]) => !x.hidden);
+const isClaude = (c) => META.chars[c]?.engine === 'claude';
+
+function md(s) {
+  const parts = String(s).split(/```(\w*)\n?([\s\S]*?)(?:```|$)/g);
+  let out = '';
+  for (let i = 0; i < parts.length; i += 3) {
+    out += esc(parts[i]).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>')
+      .replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '<a href="$2" target="_blank">$1</a>')
+      .split(/\n{2,}/).map((p) => p.trim() ? `<p>${p.replace(/\n/g, '<br>')}</p>` : '').join('');
+    if (parts[i + 2] !== undefined) out += `<pre><code>${esc(parts[i + 2])}</code></pre>`;
+  }
+  return out;
+}
+
+const TOOL = { Bash:'运行命令', Read:'读文件', Write:'写文件', Edit:'改文件', WebSearch:'搜索网页', WebFetch:'打开网页', Agent:'派分身', Skill:'用技能' };
+function toolLabel(name, input) {
+  const n = name.replace(/^mcp__plugin_power_memory__/, '').replace(/^mcp__claude-in-chrome__/, 'Chrome · ').replace(/^mcp__contract__/, '📜 契约 · ').replace(/^mcp__cua__/, '🖥 桌面 · ').replace(/^mcp__/, '');
+  const nice = { memory_save:'💾 记下来', memory_search:'🔎 翻记忆', memory_forget:'🗑 忘掉', skill_save:'📘 写技能' }[n] || TOOL[n] || n;
+  if (n === 'Bash' && /^\s*hermes\b/.test(input.command)) return `🤝 叫 Hermes <span style="opacity:.65">${esc(input.command.slice(0, 80))}</span>`;
+  if (n === 'Bash' && /^\s*opencode\b/.test(input.command)) return `🤝 叫 opencode <span style="opacity:.65">${esc(input.command.slice(0, 80))}</span>`;
+  const hint = input.command || input.query || input.file_path || input.url || input.content || input.name || '';
+  return `${nice} <span style="opacity:.65">${esc(String(hint).slice(0, 80))}</span>`;
+}
+
+// One assistant turn = one row with the character badge; text/tools stream into its body.
+let turn = null; const tools = {};
+function newTurn(c, model, final) {
+  const r = document.createElement('div'); r.className = 'row'; r.style.setProperty('--k', look(c).k);
+  r.innerHTML = `${badge(c, true)}<div class="body"><div class="name"><b>${esc(nm(c))}</b><span class="model">${esc(META.chars[c]?.engine === 'claude' ? modelName(model ?? '') : (menuOf(c)?.find((o) => o.id === model)?.label ?? META.chars[c]?.model ?? model ?? ''))}</span>${final ? '<span class="model final">总结</span>' : ''}</div></div>`;
+  $('#chat').append(r); turn = r.querySelector('.body');
+}
+function render(e) {
+  const chat = $('#chat');
+  if (e.t === 'user') { chat.insertAdjacentHTML('beforeend', `<div class="urow"><div class="user">${esc(e.d)}</div>${badge('me', true)}</div>`); if (e.members?.length > 1) turn = null; else newTurn(e.char || char, e.model); }
+  else if (e.t === 'speaker') newTurn(e.who, e.model, e.final);
+  else if (!turn) return;
+  else if (e.t === 'text' || e.t === 'text_start') {
+    turn.querySelector('.think')?.remove();
+    const last = turn.lastElementChild;
+    if (e.t === 'text' && last?.classList.contains('text')) { last._raw += e.d; last.innerHTML = md(last._raw); }
+    else { const d = document.createElement('div'); d.className = 'text'; d._raw = e.d || ''; d.innerHTML = md(d._raw); turn.append(d); }
+  } else if (e.t === 'thinking') {
+    const th = turn.querySelector('.think');
+    const label = `<i></i>思考中${e.n ? ` · ${e.n} tokens` : '…'}`;
+    if (th && th === turn.lastElementChild) th.innerHTML = label;
+    else { th?.remove(); turn.insertAdjacentHTML('beforeend', `<div class="think">${label}</div>`); }
+  } else if (e.t === 'tool') {
+    turn.querySelector('.think')?.remove();
+    const d = document.createElement('details'); d.className = 'tool';
+    d.innerHTML = `<summary>${toolLabel(e.name, e.input || {})} <span class="st">…</span></summary><pre>${esc(JSON.stringify(e.input, null, 2))}</pre>`;
+    tools[e.id] = d; turn.append(d);
+  } else if (e.t === 'tool_result') {
+    const d = tools[e.id]; if (!d) return;
+    d.querySelector('.st').outerHTML = e.error ? '<span class="bad">✗</span>' : '<span class="ok">✓</span>';
+    d.insertAdjacentHTML('beforeend', `<pre>${esc(e.out)}</pre>`);
+  } else if (e.t === 'done') {
+    turn.querySelector('.think')?.remove();
+    if (e.error) turn.insertAdjacentHTML('beforeend', `<div class="err">⚠ ${esc(e.error)}</div>`);
+    else if (e.ms) turn.insertAdjacentHTML('beforeend', `<div class="meta">${(e.ms / 1000).toFixed(1)}s</div>`);
+  }
+  chat.scrollTop = chat.scrollHeight;
+}
+
+function hero() {
+  turn = null; $('#chat').onclick = $('#chat').onchange = null;
+  $('#chat').innerHTML = `<div class="hero"><h1><img class="herologo" src="/avatar/logo" alt="POWER" onerror="this.outerHTML=\'POWER\'"></h1><p>选一个人上场，或者开个群聊让几个 Agent 一起想。Claude 角色共用记忆和技能；其他分组是这台电脑上检测到的别的 Agent。<br><small>把图片拖到头像上，或双击头像，就能换成你自己的图</small></p><div class="cards">` +
+    visible().map(([k, c]) => `<div class="card ${k === char ? 'on' : ''}" data-c="${k}" style="--k:${look(k).k}">${badge(k)}<b>${esc(nm(k))}</b><small>${c.role} · ${esc(modelName(c.model))}</small></div>`).join('') +
+    `</div></div>`;
+}
+
+function pick(c) {
+  group = null;
+  char = c; localStorage.setItem('char', c);
+  const p = prefs[c] || {}, d = META.chars[c];
+  fillModels(c, p);
+  document.documentElement.style.setProperty('--c', look(c).k);
+  $('#hb').outerHTML = badge(c).replace('<span class="badge"', '<span id="hb" class="badge"');
+  $('#hn').textContent = nm(c); $('#hr').textContent = d.role;
+  renderTree();
+  document.querySelectorAll('.card').forEach((el) => el.classList.toggle('on', el.dataset.c === c));
+}
+// Model + depth menus: Claude's list for the crew, the engine's own list for agents that have one (Codex).
+const EFF = { minimal: '最低', low: '低', medium: '中', high: '高', xhigh: '很高', max: '最大', ultra: '极限' };
+const menuOf = (c) => { const d = META.chars[c]; return d.engine === 'claude'
+  ? Object.entries(META.models).map(([id, label]) => ({ id, label, efforts: ['low', 'medium', 'high', 'xhigh', 'max'] }))
+  : META.engineModels?.[d.engine] ?? null; };
+function fillModels(c, p = prefs[c] || {}) {
+  const d = META.chars[c], menu = menuOf(c);
+  $('#model').hidden = $('#effort').hidden = !menu;
+  if (!menu) return;
+  $('#model').innerHTML = (d.engine === 'claude' ? '' : '<option value="">默认模型</option>') + menu.map((m) => `<option value="${esc(m.id)}">${esc(m.label)}</option>`).join('');
+  $('#model').value = p.model ?? (d.engine === 'claude' ? d.model : '');
+  const efforts = menu.find((m) => m.id === $('#model').value)?.efforts ?? [];
+  $('#effort').hidden = !efforts.length;
+  $('#effort').innerHTML = efforts.map((e) => `<option value="${e}">思考 · ${EFF[e] ?? e}</option>`).join('');
+  $('#effort').value = efforts.includes(p.effort) ? p.effort : efforts.includes(d.effort) ? d.effort : efforts.includes('medium') ? 'medium' : efforts[0] ?? '';
+}
+const modelLabel = (k) => { const x = META.chars[k], m = (prefs[k] || {}).model;
+  if (x.engine === 'claude') return modelName(m || x.model);
+  return menuOf(k)?.find((o) => o.id === m)?.label ?? x.model; };
+function savePref() { prefs[char] = { model: $('#model').value, effort: $('#effort').value }; localStorage.setItem('prefs', JSON.stringify(prefs)); pick(char); }
+
+async function loadThreads() {
+  [THREADS, PROJECTS] = await Promise.all([fetch('/api/threads').then((r) => r.json()), fetch('/api/projects').then((r) => r.json())]);
+  renderTree();
+}
+
+// Sidebar like Codex: group → character → project folders → chats.
+const short = (d) => d.replace(/^\/Users\/[^/]+/, '~');
+const base = (d) => (short(d) === '~' ? '主目录 ~' : d.split('/').filter(Boolean).pop());
+let renaming = false;
+function renderTree() {
+  if (!META || renaming) return;
+  const groups = {};
+  const last = {};
+  for (const t of THREADS) if (t.char && !(last[t.char] > t.updated)) last[t.char] = t.updated;
+  for (const [k, x] of visible()) (groups[x.group] ??= []).push([k, x]);
+  for (const list of Object.values(groups)) list.sort(([a], [b]) => (last[b] ?? '').localeCompare(last[a] ?? '')); // stable: untouched keep default order
+  const groupThreads = THREADS.filter((t) => t.members?.length > 1);
+  const chats = `<div class="sec">群聊 <button class="mini" data-act="newgroup" title="新群聊">＋</button></div>` +
+    (groupThreads.map((t) => `<div class="th grp ${t.id === cur ? 'on' : ''}" data-act="thread" data-id="${t.id}"><span class="stack">${t.members.slice(0, 4).map((m) => badge(m, true)).join('')}</span>${t.running ? '<span class="dot"></span>' : ''}${esc(t.title)}</div>`).join('') ||
+     '<div class="meta" style="padding:0 10px 6px">拉几个 Agent 一起解决问题</div>');
+  const heading = (g) => `<div class="sec">${esc(g)}${g === '本机' ? ' <button class="mini" data-act="rescan" title="重新扫描本机 Agent">🔍 扫描</button>' : ''}</div>`;
+  if (!groups['本机']) groups['本机'] = [];
+  $('#tree').innerHTML = chats + Object.entries(groups).map(([g, list]) => heading(g) + (list.length ? '' : '<div class="meta" style="padding:0 10px 6px">没发现别的 Agent</div>') + list.map(([k, x]) => {
+    const isOpen = open_.has(k);
+    const head = `<div class="ch ${k === char ? 'on' : ''}" data-act="char" data-c="${k}" style="--k:${look(k).k}">${badge(k, true)}<div class="who2"><b>${esc(nm(k))}</b><small>${esc(x.role)} · ${esc(modelLabel(k))}</small></div><span class="car">${isOpen ? '▾' : '▸'}</span></div>`;
+    if (!isOpen) return head;
+    const projs = (PROJECTS[k] || []).map((d) => {
+      const ts = THREADS.filter((t) => t.char === k && t.dir === d);
+      const here = k === char && d === dir;
+      return `<div class="proj ${here && !cur ? 'on' : ''}" data-act="proj" data-k="${k}" data-d="${esc(d)}" title="${esc(short(d))}"><span>📁 ${esc(base(d))}</span>` +
+        `<span class="acts"><i data-act="newin" title="新对话">＋</i>${short(d) === '~' ? '' : '<i data-act="rmproj" title="从列表移除（不删文件）">×</i>'}</span></div>` +
+        ts.map((t) => `<div class="th ${t.id === cur ? 'on' : ''}" data-act="thread" data-id="${t.id}">${t.running ? '<span class="dot"></span>' : ''}${esc(t.title)}</div>`).join('');
+    }).join('');
+    return head + `<div class="kids" style="--k:${look(k).k}">${projs}<div class="proj add" data-act="addproj" data-k="${k}">＋ 添加项目文件夹</div></div>`;
+  }).join('')).join('');
+}
+
+function pickFolder(cb) {
+  folderCb = cb;
+  if (window.webkit?.messageHandlers?.power) window.webkit.messageHandlers.power.postMessage('pickFolder');
+  else { const p = prompt('项目文件夹（绝对路径）', dir || '~'); if (p) window.powerFolder(p); }
+}
+async function addProject(k, d) {
+  const r = await fetch('/api/projects', { method: 'POST', body: JSON.stringify({ char: k, dir: d }) });
+  if (!r.ok) return alert((await r.json()).error);
+  open_.add(k); localStorage.setItem('open', JSON.stringify([...open_]));
+  await loadThreads();
+}
+// ⚙️ Settings: show/hide agents, custom agents, defaults, data.
+function applySettings() {
+  const st = META.settings;
+  document.body.classList.toggle('norain', !st.rain);
+  $('#hint').textContent = `${st.enterToSend ? 'Enter 发送 · Shift+Enter 换行' : '⌘Enter 发送 · Enter 换行'} · 每个 Agent 都在你本机运行`;
+}
+async function saveSetting(patch) {
+  const r = await fetch('/api/settings', { method: 'POST', body: JSON.stringify(patch) });
+  const out = await r.json();
+  if (!r.ok) { alert(out.error); return false; }
+  META = await (await fetch('/api/meta')).json(); applySettings(); renderTree(); return true;
+}
+const pathOf = (k) => { const x = META.chars[k]; return x.engine === 'custom' ? x.bin : META.agents.find((a) => a.engine === x.engine && (!a.model || a.model === x.model))?.path ?? ''; };
+function settingsPage() {
+  cur = null; group = null; setBusy(false); turn = null; renderTree();
+  $('#hb').outerHTML = '<span id="hb" class="badge" style="--k:#8f9bb3">⚙</span>'; $('#hn').textContent = '设置'; $('#hr').textContent = `Power v${META.version}`;
+  $('#model').hidden = $('#effort').hidden = true;
+  const st = META.settings, byGroup = {};
+  for (const [k, x] of Object.entries(META.chars)) (byGroup[x.group] ??= []).push([k, x]);
+  const row = ([k, x]) => `<div class="srow" style="--k:${look(k).k}">${badge(k, true)}<div class="sinfo"><b>${esc(nm(k))}</b><small>${esc(x.engine)}${x.engine === 'claude' ? '' : ' · ' + esc(x.model)} · <code>${esc(short(pathOf(k)))}</code></small></div>` +
+    (x.custom ? `<button class="mini" data-rm="${k}">删除</button>` : '') +
+    `<label class="sw"><input type="checkbox" data-show="${k}" ${x.hidden ? '' : 'checked'}><span></span></label></div>`;
+  $('#chat').innerHTML = `<div class="settings">
+    <h2>通用</h2>
+    <div class="scard">
+      <div class="srow"><div class="sinfo"><b>默认工作文件夹</b><small>新对话默认在这里读写文件</small></div><button id="sdir">📁 ${esc(st.defaultDir ? short(st.defaultDir) : '~ 主目录')}</button>${st.defaultDir ? '<button class="mini" id="sdirx">恢复默认</button>' : ''}</div>
+      <div class="srow"><div class="sinfo"><b>角色包</b><small>personas/ 里的 JSON；也可以把自己的放进 ~/.power/personas/</small></div><select id="spack">${Object.entries(META.packs).map(([k, n]) => `<option value="${esc(k)}" ${k === (st.personaPack || 'default') ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select></div>
+      <div class="srow"><div class="sinfo"><b>你的称呼</b><small>角色们怎么叫你；留空就不特别称呼</small></div><input id="sname" value="${esc(st.userName || '')}" placeholder="比如：老板" style="padding:6px 10px;border-radius:8px;border:1px solid var(--line);background:#06070f;color:var(--text);font:inherit;width:160px"></div>
+      <div class="srow"><div class="sinfo"><b>回车直接发送</b><small>关掉后用 ⌘Enter 发送，Enter 换行</small></div><label class="sw"><input type="checkbox" data-set="enterToSend" ${st.enterToSend ? 'checked' : ''}><span></span></label></div>
+      <div class="srow"><div class="sinfo"><b>下雨动画</b><small>背景的雨夜动画</small></div><label class="sw"><input type="checkbox" data-set="rain" ${st.rain ? 'checked' : ''}><span></span></label></div>
+      <div class="srow"><div class="sinfo"><b>启动时打开记忆本</b></div><label class="sw"><input type="checkbox" data-set="memOpen" ${st.memOpen ? 'checked' : ''}><span></span></label></div>
+    </div>
+    <h2>Agent <small>本机检测到 ${META.agents.length} 个 · 关掉的不会出现在侧边栏和群聊里</small></h2>
+    <div class="sbar"><button id="srescan">🔍 重新扫描</button><button id="snolocal">隐藏所有本地模型</button><button id="sall">全部显示</button></div>
+    ${Object.entries(byGroup).map(([g, list]) => `<div class="sgroup">${esc(g)}</div><div class="scard">${list.map(row).join('')}</div>`).join('')}
+    <h2>添加自定义 Agent <small>任何能「收一句话、打印回答」的命令行工具</small></h2>
+    <div class="scard sform">
+      <input id="cname" placeholder="名字，比如 My Agent">
+      <input id="cbin" placeholder="命令，比如 my-agent 或 /usr/local/bin/my-agent">
+      <input id="cargs" placeholder="参数，比如 -p {prompt}（{prompt} = 你的话，{dir} = 工作文件夹）">
+      <input id="cgroup" placeholder="分组（默认：本机）">
+      <button id="cadd">添加</button>
+    </div>
+    <h2>Obsidian <small>记忆本、技能和 Claude 的长期笔记都放在库里的 Power 文件夹，Claude 角色能读整个库</small></h2>
+    <div class="scard">
+      <div class="srow"><div class="sinfo"><b>Obsidian 库</b><small>${st.vault ? `<code>${esc(short(st.vault))}</code> · 记忆本在 Power/记忆本` : '未设置：记忆本存在 ~/.power/memory'}</small></div>
+        <button id="svault">${st.vault ? '换一个库' : '选择库'}</button>${st.vault ? '<button id="sobs">在 Obsidian 打开</button><button class="mini" id="svaultx">不用库</button>' : ''}</div>
+    </div>
+    <h2>Contract 工具网关 <small>一个密钥：搜索、抓网页、社交、加密、金融、公司信息，自动故障转移</small></h2>
+    <div class="scard">
+      <div class="srow"><div class="sinfo"><b>${st.contract?.connected ? '已接入' : '未接入'}</b><small>${st.contract?.connected ? `<code>${esc(st.contract.url)}</code> · Claude 角色每次对话都能用 contract 工具` : '在 ~/.power/settings.json 里设置 contract: { url, key, mcp }'}</small></div>
+        ${st.contract?.connected ? `<button id="sct" data-url="${esc(st.contract.url)}">打开网关后台</button>` : ''}</div>
+    </div>
+    <h2>数据</h2>
+    <div class="scard">
+      <div class="srow"><div class="sinfo"><b>数据文件夹</b><small><code>~/.power</code>：对话、记忆、技能、头像、设置都在这里</small></div><button id="sopen">在 Finder 打开</button></div>
+      <div class="srow"><div class="sinfo"><b>清空所有对话</b><small>记忆和技能不受影响</small></div><button id="sclear" class="danger">清空</button></div>
+    </div>
+    <p class="meta" style="text-align:center;margin:26px 0 10px">Power v${esc(META.version)} · MIT License · 每个 Agent 用它自己的登录和额度在你本机运行</p>
+  </div>`;
+  const c = $('#chat');
+  c.onchange = async (e) => {
+    const el = e.target;
+    if (el.id === 'spack') { await saveSetting({ personaPack: el.value }); META = await (await fetch('/api/meta')).json(); char = ''; settingsPage(); return; }
+    if (el.id === 'sname') { await saveSetting({ userName: el.value }); return; }
+    if (el.dataset.set) await saveSetting({ [el.dataset.set]: el.checked });
+    else if (el.dataset.show) {
+      const hidden = new Set(META.settings.hidden);
+      el.checked ? hidden.delete(el.dataset.show) : hidden.add(el.dataset.show);
+      await saveSetting({ hidden: [...hidden] });
+    }
+  };
+  c.onclick = async (e) => {
+    const el = e.target.closest('button'); if (!el) return;
+    const keys = Object.keys(META.chars);
+    if (el.id === 'sdir') pickFolder(async (d) => { if (await saveSetting({ defaultDir: d })) { setDir(d); settingsPage(); } });
+    else if (el.id === 'sdirx') { await saveSetting({ defaultDir: null }); settingsPage(); }
+    else if (el.id === 'svault') pickFolder(async (d) => { if (await saveSetting({ vault: d })) { settingsPage(); loadMem(); } });
+    else if (el.id === 'svaultx') { await saveSetting({ vault: null }); settingsPage(); loadMem(); }
+    else if (el.id === 'sobs') { const r = await fetch('/api/open-vault', { method: 'POST' }); if (!r.ok) alert((await r.json()).error); }
+    else if (el.id === 'srescan') { el.textContent = '扫描中…'; META = await (await fetch('/api/meta?rescan=1')).json(); await loadThreads(); settingsPage(); }
+    else if (el.id === 'snolocal') { await saveSetting({ hidden: [...new Set([...META.settings.hidden, ...keys.filter((k) => META.chars[k].engine === 'ollama')])] }); settingsPage(); }
+    else if (el.id === 'sall') { await saveSetting({ hidden: [] }); settingsPage(); }
+    else if (el.dataset.rm) { await fetch('/api/custom', { method: 'POST', body: JSON.stringify({ remove: el.dataset.rm }) }); await saveSetting({}); settingsPage(); }
+    else if (el.id === 'cadd') {
+      const r = await fetch('/api/custom', { method: 'POST', body: JSON.stringify({ name: $('#cname').value, bin: $('#cbin').value, args: $('#cargs').value, group: $('#cgroup').value }) });
+      if (!r.ok) return alert((await r.json()).error);
+      await saveSetting({}); settingsPage();
+    } else if (el.id === 'sopen') fetch('/api/open-data', { method: 'POST' });
+    else if (el.id === 'sct') window.open(el.dataset.url, '_blank');
+    else if (el.id === 'sclear') {
+      // Two clicks instead of a confirm() dialog (the Mac app has no JS confirm panel).
+      if (el.dataset.armed) { await fetch('/api/clear-chats', { method: 'POST' }); el.textContent = '已清空'; el.disabled = true; loadThreads(); }
+      else { el.dataset.armed = '1'; el.textContent = '再点一次确认'; }
+    }
+  };
+}
+
+const gsel = new Set();
+function groupPicker() {
+  gsel.clear(); // every new group starts empty
+  cur = null; group = null; setBusy(false); turn = null; renderTree(); $('#chat').onchange = null;
+  $('#hb').outerHTML = '<span id="hb" class="badge" style="--k:var(--pink)">群</span>'; $('#hn').textContent = '新群聊'; $('#hr').textContent = '选成员'; $('#model').hidden = $('#effort').hidden = true;
+  $('#chat').innerHTML = `<div class="hero"><h1>群聊</h1><p>选 2–8 个 Agent，它们会轮流发言、看到彼此的想法，最后由第一个选的人总结。</p><div class="cards">` +
+    visible().map(([k, c]) => `<div class="card pickg ${gsel.has(k) ? 'on' : ''}" data-gm="${k}" style="--k:${look(k).k}">${badge(k)}<b>${esc(nm(k))}</b><small>${esc(c.role)}</small><i class="ord"></i></div>`).join('') +
+    `</div><div class="gctl"><select id="rounds"><option value="1">讨论 1 轮</option><option value="2">讨论 2 轮</option><option value="3">讨论 3 轮</option></select><button id="gstart">开始群聊</button></div></div>`;
+  const paint = () => { const order = [...gsel]; document.querySelectorAll('.pickg').forEach((el) => { const i = order.indexOf(el.dataset.gm); el.classList.toggle('on', i >= 0); el.querySelector('.ord').textContent = i === 0 ? '总结' : i > 0 ? i + 1 : ''; }); $('#gstart').disabled = gsel.size < 2; };
+  $('#chat').querySelector('.cards').onclick = (e) => { const k = e.target.closest('[data-gm]')?.dataset.gm; if (!k) return; gsel.has(k) ? gsel.delete(k) : gsel.size < 8 && gsel.add(k); paint(); };
+  $('#gstart').onclick = () => { startGroup([...gsel], Number($('#rounds').value)); };
+  paint();
+}
+function startGroup(members, rounds) {
+  group = { members, rounds }; groupHeader(members);
+  $('#chat').innerHTML = `<div class="hero"><div class="cards">${members.map((m, i) => `<div class="card on" style="--k:${look(m).k}">${badge(m)}<b>${esc(nm(m))}</b><small>${i === 0 ? '负责总结' : '参与讨论'}</small></div>`).join('')}</div><p>说出你的问题，它们会一起想。</p></div>`;
+  $('#input').focus();
+}
+function renameThread(id) {
+  const row = document.querySelector(`#tree .th[data-id="${id}"]`), t = THREADS.find((x) => x.id === id);
+  if (!row || !t || renaming) return;
+  renaming = true;
+  row.innerHTML = `<input class="ren" maxlength="60">`;
+  const inp = row.querySelector('input'); inp.value = t.title; inp.focus(); inp.select();
+  let finished = false;
+  const finish = async (save) => {
+    if (finished) return; finished = true;
+    const title = inp.value.trim();
+    if (save && title && title !== t.title) {
+      const r = await fetch('/api/rename', { method: 'POST', body: JSON.stringify({ id, title }) });
+      if (!r.ok) alert((await r.json()).error);
+      else if (id === cur && group) $('#hn').textContent = title;
+    }
+    renaming = false; loadThreads();
+  };
+  inp.onkeydown = (e) => { if (e.key === 'Enter' && !e.isComposing) finish(true); else if (e.key === 'Escape') finish(false); };
+  inp.onblur = () => finish(true);
+  inp.onclick = (e) => e.stopPropagation();
+}
+function groupHeader(members, title) {
+  $('#hb').outerHTML = `<span id="hb" class="stack big">${members.slice(0, 4).map((m) => badge(m, true)).join('')}</span>`;
+  $('#hn').textContent = title || `群聊 · ${members.length} 人`; $('#hr').textContent = members.map(nm).join('、');
+  $('#model').hidden = $('#effort').hidden = true;
+  document.documentElement.style.setProperty('--c', look(members[0]).k);
+}
+// Like WeChat: picking a person opens your latest chat with them, or a fresh one.
+function switchTo(k) {
+  const last = THREADS.find((t) => t.char === k && !(t.members?.length > 1));
+  if (last) open(last.id); else newChat(k, META.settings.defaultDir || META.home);
+}
+function newChat(k, d) { cur = null; group = null; setBusy(false); if (k !== char) pick(k); setDir(d); hero(); renderTree(); $('#input').focus(); }
+
+$('#tree').onclick = async (e) => {
+  const el = e.target.closest('[data-act]'); if (!el) return;
+  const row = el.closest('.proj'), act = el.dataset.act;
+  if (act === 'char') {
+    const k = el.dataset.c;
+    const inChat = !group && THREADS.find((t) => t.id === cur)?.char === k;
+    if (k === char && (inChat || !cur)) open_.has(k) ? open_.delete(k) : open_.add(k); // same person: just fold/unfold
+    else { open_.add(k); switchTo(k); }
+    localStorage.setItem('open', JSON.stringify([...open_])); renderTree();
+  } else if (act === 'proj' || act === 'newin') newChat(row.dataset.k, row.dataset.d);
+  else if (act === 'rmproj') { await fetch('/api/projects', { method: 'POST', body: JSON.stringify({ char: row.dataset.k, dir: row.dataset.d, remove: true }) }); loadThreads(); }
+  else if (act === 'addproj') pickFolder((d) => addProject(el.dataset.k, d).then(() => newChat(el.dataset.k, d)));
+  else if (act === 'thread') {
+    // Double-click a chat to rename it. Counted via e.detail because the first click re-renders the list.
+    if (e.detail >= 2) renameThread(el.dataset.id);
+    else if (el.dataset.id !== cur) open(el.dataset.id);
+  }
+  else if (act === 'newgroup') groupPicker();
+  else if (act === 'rescan') { el.textContent = '扫描中…'; META = await (await fetch('/api/meta?rescan=1')).json(); await loadThreads(); }
+};
+
+async function open(id) {
+  cur = id; setBusy(false); $('#chat').onclick = $('#chat').onchange = null;
+  const t = await (await fetch('/api/thread/' + id)).json();
+  $('#chat').innerHTML = ''; turn = null; t.events.forEach(render);
+  if (t.members?.length > 1) { group = { members: t.members, rounds: 1 }; groupHeader(t.members, t.title); }
+  else { group = null; const who = t.char || t.events.find((e) => e.t === 'user')?.char; if (who) { open_.add(who); pick(who); } }
+  setDir(t.dir || dir);
+  if (t.running) { render({ t: 'thinking' }); setBusy(true); poll(id); }
+  loadThreads();
+}
+async function poll(id) {
+  while (cur === id) {
+    await new Promise((r) => setTimeout(r, 1500));
+    const t = await (await fetch('/api/thread/' + id)).json();
+    if (!t.running) { if (cur === id) open(id); return; }
+  }
+}
+
+function setBusy(b) { busy = b; $('#send').textContent = b ? '停' : 'BOOM'; $('#send').classList.toggle('stop', b); }
+function boom() { const r = $('#send').getBoundingClientRect(), el = $('#boom'); el.style.setProperty('--x', r.x + r.width / 2 + 'px'); el.style.setProperty('--y', r.y + r.height / 2 + 'px'); el.classList.remove('go'); void el.offsetWidth; el.classList.add('go'); }
+
+async function send() {
+  if (busy) { await fetch('/api/stop', { method: 'POST', body: JSON.stringify({ thread: cur }) }); return; }
+  const text = $('#input').value.trim(); if (!text) return;
+  $('#input').value = ''; grow(); boom();
+  if (!cur) $('#chat').innerHTML = '';
+  const model = $('#model').value, effort = $('#effort').value;
+  const g = group?.members;
+  render({ t: 'user', d: text, char, model, members: g }); if (!g) render({ t: 'thinking' }); setBusy(true);
+  const res = await fetch('/api/send', { method: 'POST', body: JSON.stringify({ thread: cur, text, char, model, effort, dir: dir || undefined, members: g, rounds: group?.rounds }) });
+  if (!res.ok) { render({ t: 'done', error: (await res.json()).error }); setBusy(false); return; }
+  const reader = res.body.getReader(), dec = new TextDecoder(); let buf = '', mine = cur;
+  for (;;) {
+    const { value, done } = await reader.read(); if (done) break;
+    buf += dec.decode(value, { stream: true });
+    let i; while ((i = buf.indexOf('\n')) >= 0) {
+      const e = JSON.parse(buf.slice(0, i)); buf = buf.slice(i + 1);
+      if (e.t === 'thread') { if (!cur) cur = mine = e.id; setDir(e.dir); loadThreads(); continue; }
+      if (cur === mine) render(e);
+    }
+  }
+  if (cur === mine) setBusy(false);
+  loadThreads(); loadMem();
+}
+
+async function loadMem() {
+  const q = $('#q').value.trim();
+  const { memories, skills } = await (await fetch('/api/memory' + (q ? '?q=' + encodeURIComponent(q) : ''))).json();
+  $('#memlist').innerHTML =
+    `<div class="sec" style="padding:4px 0 6px">事实 · ${memories.length}</div>` +
+    (memories.map((m) => `<div class="m"><button class="x" data-id="${m.id}" title="让它忘掉">×</button>${esc(m.content)}<small>${esc(m.tags)} · ${m.created.slice(0, 10)}</small></div>`).join('') || '<div class="meta">空的。跟谁说一句「记住…」试试</div>') +
+    `<div class="sec" style="padding:14px 0 6px">技能 · ${skills.length}</div>` +
+    (skills.map((s) => `<div class="m"><b>${esc(s.name)}</b><small>${esc(s.description)}</small></div>`).join('') || '<div class="meta">做完会重复的活，它会自己写下来</div>');
+}
+
+function setDir(d) { dir = d || ''; localStorage.setItem('dir', dir); $('#dir').textContent = '📁 ' + (dir ? dir.replace(/^\/Users\/[^/]+/, '~') : '~'); }
+window.powerFolder = (p) => { const d = p.replace(/^~/, META.home); const cb = folderCb; folderCb = null; cb ? cb(d) : setDir(d); };
+async function loadPact() {
+  const d = await (await fetch('/api/contract')).json();
+  if (!d.connected) { $('#pactbody').innerHTML = `<div class="seal"><b>未签约</b><small>${esc(d.error ?? '在 ⚙️ 设置里看 Contract 怎么接入')}</small></div>`; return; }
+  const all = Object.entries(d.categories).flatMap(([c, ts]) => ts.map((t) => ({ ...t, c })));
+  const live = all.filter((t) => t.available).length;
+  const CAT = { Search: '搜索', Scrape: '抓取', Social: '社交', Crypto: '加密', Finance: '金融', 'E-commerce': '电商', Business: '商业' };
+  $('#pactbody').innerHTML = `<div class="seal"><b>${live} / ${all.length}</b><small>份契约生效 · 剩余 ${d.balance?.credits ?? '?'} 积分<br>Claude 角色直接调用，坏掉的服务商自动换下一家</small></div>` +
+    Object.entries(d.categories).map(([c, ts]) => `<div class="sec" style="padding:10px 0 6px">${CAT[c] ?? c}</div>` + ts.map((t) =>
+      `<div class="pact ${t.available ? '' : 'off'}" title="${esc(t.description)}"><b>${esc(t.name)}</b><small>${esc(t.description)}</small><div class="pv">${t.available ? esc(t.providers.join(' → ')) : '没配服务商密钥'} · ${t.credits} 积分</div></div>`).join('')).join('') +
+    `<button class="mini" style="margin-top:10px" onclick="window.open('${esc(d.url)}', '_blank')">打开网关后台</button>`;
+}
+function grow() { const t = $('#input'); t.style.height = 'auto'; t.style.height = t.scrollHeight + 'px'; }
+
+(async () => {
+  META = await (await fetch('/api/meta')).json();
+  $('#model').innerHTML = Object.entries(META.models).map(([id, n]) => `<option value="${id}">${n}</option>`).join('');
+  if (!META.chars[char] || META.chars[char].hidden) char = visible()[0]?.[0] ?? Object.keys(META.chars)[0];
+  if (!open_.size) open_.add(char);
+  pick(char); hero(); loadThreads(); loadMem();
+  document.addEventListener('click', (e) => { const c = e.target.closest('.card[data-c]')?.dataset.c; if (c) switchTo(c); });
+  $('#model').onchange = $('#effort').onchange = savePref;
+  $('#send').onclick = send;
+  $('#input').addEventListener('input', grow);
+  $('#input').addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' || e.shiftKey || e.isComposing) return;
+    if (META.settings.enterToSend || e.metaKey || e.ctrlKey) { e.preventDefault(); send(); }
+  });
+  $('#gear').onclick = settingsPage;
+  applySettings();
+  if (!dir && META.settings.defaultDir) setDir(META.settings.defaultDir);
+  $('#new').onclick = () => newChat(char, dir || META.home);
+  $('#q').oninput = loadMem;
+  $('#memlist').onclick = async (e) => { const id = e.target.dataset?.id; if (!id) return; await fetch('/api/forget', { method: 'POST', body: JSON.stringify({ id }) }); loadMem(); };
+  setInterval(loadThreads, 4000);
+  setDir(dir);
+  // Right side holds one panel at a time: 记忆本 or 恶魔契约.
+  const memOpen = (o) => { if (o) pactOpen(false); document.body.classList.toggle('memopen', o); $('#memt').classList.toggle('on', o); try { localStorage.setItem('mem', o ? '1' : ''); } catch {} if (o) loadMem(); };
+  const pactOpen = (o) => { if (o) memOpen(false); document.body.classList.toggle('pactopen', o); $('#pactt').classList.toggle('on', o); if (o) loadPact(); };
+  $('#pactt').onclick = () => pactOpen(!document.body.classList.contains('pactopen'));
+  memOpen(META.settings.memOpen);
+  $('#memt').onclick = () => memOpen(!document.body.classList.contains('memopen'));
+  $('#dir').onclick = () => pickFolder((d) => addProject(char, d).then(() => newChat(char, d)));
+  // Custom pictures: double-click or drop an image on any character badge.
+  const up = async (c, file) => {
+    if (!file?.type.startsWith('image/')) return;
+    const r = await fetch('/avatar/' + c, { method: 'POST', headers: { 'content-type': file.type }, body: file });
+    if (!r.ok) return alert((await r.json()).error);
+    av = Date.now(); pick(char); if (!cur) hero();
+  };
+  const picker = Object.assign(document.createElement('input'), { type: 'file', accept: 'image/png,image/jpeg,image/webp,image/gif' });
+  document.addEventListener('dblclick', (e) => { const c = e.target.closest('[data-c]')?.dataset.c; if (!c) return; picker.onchange = () => up(c, picker.files[0]); picker.value = ''; picker.click(); });
+  document.addEventListener('dragover', (e) => { if (e.target.closest('[data-c]')) e.preventDefault(); });
+  document.addEventListener('drop', (e) => { const c = e.target.closest('[data-c]')?.dataset.c; if (!c) return; e.preventDefault(); up(c, e.dataTransfer.files[0]); });
+})();
+</script>
+</body>
+</html>
