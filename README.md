@@ -47,7 +47,7 @@ Everything lives in **⚙️ Settings**:
 
 - **Persona pack:** `personas/default.json` (original crew), `personas/chainsaw-man.json` (a fan-made example), or your own in `~/.power/personas/`.
 - **Your name:** what the crew calls you.
-- **Agents:** turn each detected agent on or off, rescan, hide all local models, or add a custom CLI.
+- **Agents:** turn each detected agent on or off, move it to any group (or a new one), rescan, hide all local models, or add a custom CLI.
 - **Obsidian vault:** memory notes go to `<vault>/Power/记忆本/`.
 - **Default folder, send key, and so on.**
 

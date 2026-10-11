@@ -96,7 +96,7 @@ let AGENTS = detect();
 
 // Settings (⚙️ in the app): which agents to show, custom agents, defaults.
 const SETTINGS = join(HOME, 'settings.json');
-const DEFAULTS = { hidden: [], custom: {}, defaultDir: null, vault: null, personaPack: 'default', userName: '', turnTimeoutMin: 10, rain: true, enterToSend: true, memOpen: false };
+const DEFAULTS = { hidden: [], custom: {}, defaultDir: null, vault: null, personaPack: 'default', userName: '', turnTimeoutMin: 10, charGroups: {}, rain: true, enterToSend: true, memOpen: false };
 const publicSettings = (s) => ({ ...s, contract: s.contract ? { url: s.contract.url, connected: !!s.contract.key } : null });
 const loadSettings = () => { try { return { ...DEFAULTS, ...JSON.parse(readFileSync(SETTINGS, 'utf8')) }; } catch { return { ...DEFAULTS }; } };
 const saveSettings = (s) => writeFileSync(SETTINGS, JSON.stringify(s, null, 1));
@@ -114,6 +114,8 @@ function allChars() {
   for (const [key, c] of Object.entries(st.custom))
     out[key] = { group: c.group || '本机', engine: 'custom', custom: true, name: c.name, zh: c.name, role: '自定义', model: c.bin, bin: c.bin, template: c.args };
   for (const k of st.hidden) if (out[k]) out[k].hidden = true;
+  // Per-user group overrides (Settings → Agent): move any character to any group without editing the pack.
+  for (const [k, g] of Object.entries(st.charGroups ?? {})) if (out[k] && g) out[k].group = g;
   return out;
 }
 const binOf = (c) => c.engine === 'custom' ? findBin(c.bin) : AGENTS.find((a) => a.engine === c.engine && (!a.model || a.model === c.model))?.path;
@@ -368,6 +370,8 @@ createServer(async (req, res) => {
       for (const k of ['rain', 'enterToSend', 'memOpen']) if (typeof b[k] === 'boolean') st[k] = b[k];
       if (Number(b.turnTimeoutMin) > 0) st.turnTimeoutMin = Math.min(Number(b.turnTimeoutMin), 120);
       if (typeof b.userName === 'string') st.userName = b.userName.trim().slice(0, 40);
+      if (b.charGroups && typeof b.charGroups === 'object')
+        st.charGroups = Object.fromEntries(Object.entries(b.charGroups).map(([k, g]) => [k, String(g ?? '').trim().slice(0, 20)]).filter(([, g]) => g));
       if (typeof b.personaPack === 'string') { if (!listPacks()[b.personaPack]) return json(res, 400, { error: `没有这个角色包：${b.personaPack}` }); st.personaPack = b.personaPack; }
       if ('vault' in b) { if (b.vault && !existsSync(b.vault)) return json(res, 400, { error: `文件夹不存在：${b.vault}` }); st.vault = b.vault || null; }
       saveSettings(st);

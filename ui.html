@@ -107,7 +107,8 @@
   .sinfo { flex:1; min-width:0; } .sinfo b { display:block; font-size:14px; } .sinfo small { color:var(--dim); font-size:12px; }
   .sinfo code { font-size:11px; }
   .sgroup { color:var(--dim); font-size:12px; margin:14px 2px 6px; letter-spacing:1px; }
-  .sbar { display:flex; gap:8px; margin-bottom:4px; }
+  .sbar { display:flex; gap:8px; margin-bottom:4px; flex-wrap:wrap; }
+  .sgrp { font:12.5px var(--body); color:var(--text); background:#ffffff0d; border:1px solid var(--line); border-radius:8px; padding:4px 6px; max-width:130px; }
   .sform { display:grid; gap:8px; padding:12px; } .sform input { padding:8px 11px; border-radius:9px; border:1px solid var(--line); background:#06070f; color:var(--text); font:inherit; }
   .sform button { justify-self:end; }
   .danger { border-color:#ff5a3660; color:#ff8a6a; }
@@ -425,7 +426,9 @@ function settingsPage() {
   $('#model').hidden = $('#effort').hidden = true;
   const st = META.settings, byGroup = {};
   for (const [k, x] of Object.entries(META.chars)) (byGroup[x.group] ??= []).push([k, x]);
-  const row = ([k, x]) => `<div class="srow" style="--k:${look(k).k}">${badge(k, true)}<div class="sinfo"><b>${esc(nm(k))}</b><small>${esc(x.engine)}${x.engine === 'claude' ? '' : ' · ' + esc(x.model)} · <code>${esc(short(pathOf(k)))}</code></small></div>` +
+  const groupNames = Object.keys(byGroup);
+  const groupPick = (k, x) => `<select class="sgrp" data-grp="${k}" title="放到哪个分组">${groupNames.map((g) => `<option ${g === x.group ? 'selected' : ''}>${esc(g)}</option>`).join('')}<option value="__new">＋ 新分组…</option></select>`;
+  const row = ([k, x]) => `<div class="srow" style="--k:${look(k).k}">${badge(k, true)}<div class="sinfo"><b>${esc(nm(k))}</b><small>${esc(x.engine)}${x.engine === 'claude' ? '' : ' · ' + esc(x.model)} · <code>${esc(short(pathOf(k)))}</code></small></div>` + groupPick(k, x) +
     (x.custom ? `<button class="mini" data-rm="${k}">删除</button>` : '') +
     `<label class="sw"><input type="checkbox" data-show="${k}" ${x.hidden ? '' : 'checked'}><span></span></label></div>`;
   $('#chat').innerHTML = `<div class="settings">
@@ -440,7 +443,7 @@ function settingsPage() {
       <div class="srow"><div class="sinfo"><b>启动时打开记忆本</b></div><label class="sw"><input type="checkbox" data-set="memOpen" ${st.memOpen ? 'checked' : ''}><span></span></label></div>
     </div>
     <h2>Agent <small>本机检测到 ${META.agents.length} 个 · 关掉的不会出现在侧边栏和群聊里</small></h2>
-    <div class="sbar"><button id="srescan">🔍 重新扫描</button><button id="snolocal">隐藏所有本地模型</button><button id="sall">全部显示</button></div>
+    <div class="sbar"><button id="srescan">🔍 重新扫描</button><button id="snolocal">隐藏所有本地模型</button><button id="sall">全部显示</button><button id="sgrpreset">恢复角色包的默认分组</button></div>
     ${Object.entries(byGroup).map(([g, list]) => `<div class="sgroup">${esc(g)}</div><div class="scard">${list.map(row).join('')}</div>`).join('')}
     <h2>添加自定义 Agent <small>任何能「收一句话、打印回答」的命令行工具</small></h2>
     <div class="scard sform">
@@ -473,6 +476,18 @@ function settingsPage() {
     if (el.id === 'spack') { await saveSetting({ personaPack: el.value }); META = await (await fetch('/api/meta')).json(); char = ''; settingsPage(); return; }
     if (el.id === 'sname') { await saveSetting({ userName: el.value }); return; }
     if (el.id === 'slimit') { await saveSetting({ turnTimeoutMin: Number(el.value) }); return; }
+    if (el.dataset.grp) {
+      const k = el.dataset.grp;
+      if (el.value !== '__new') { await saveSetting({ charGroups: { ...META.settings.charGroups, [k]: el.value } }); settingsPage(); return; }
+      // New group: swap the dropdown for a text box (the Mac app has no prompt() dialog).
+      const inp = Object.assign(document.createElement('input'), { className: 'sgrp', placeholder: '新分组名，回车保存', maxLength: 20 });
+      el.replaceWith(inp); inp.focus();
+      let fin = false;
+      const done = async (save) => { if (fin) return; fin = true; const g = inp.value.trim(); if (save && g) await saveSetting({ charGroups: { ...META.settings.charGroups, [k]: g } }); settingsPage(); };
+      inp.onkeydown = (ev) => { if (ev.key === 'Enter' && !ev.isComposing) done(true); else if (ev.key === 'Escape') done(false); };
+      inp.onblur = () => done(true);
+      return;
+    }
     if (el.dataset.set) await saveSetting({ [el.dataset.set]: el.checked });
     else if (el.dataset.show) {
       const hidden = new Set(META.settings.hidden);
@@ -491,6 +506,7 @@ function settingsPage() {
     else if (el.id === 'srescan') { el.textContent = '扫描中…'; META = await (await fetch('/api/meta?rescan=1')).json(); await loadThreads(); settingsPage(); }
     else if (el.id === 'snolocal') { await saveSetting({ hidden: [...new Set([...META.settings.hidden, ...keys.filter((k) => META.chars[k].engine === 'ollama')])] }); settingsPage(); }
     else if (el.id === 'sall') { await saveSetting({ hidden: [] }); settingsPage(); }
+    else if (el.id === 'sgrpreset') { await saveSetting({ charGroups: {} }); settingsPage(); }
     else if (el.dataset.rm) { await fetch('/api/custom', { method: 'POST', body: JSON.stringify({ remove: el.dataset.rm }) }); await saveSetting({}); settingsPage(); }
     else if (el.id === 'cadd') {
       const r = await fetch('/api/custom', { method: 'POST', body: JSON.stringify({ name: $('#cname').value, bin: $('#cbin').value, args: $('#cargs').value, group: $('#cgroup').value }) });
