@@ -347,7 +347,7 @@ function fillModels(c, p = prefs[c] || {}) {
   $('#model').hidden = $('#effort').hidden = !menu;
   if (!menu) return;
   $('#model').innerHTML = (d.engine === 'claude' ? '' : '<option value="">默认模型</option>') + menu.map((m) => `<option value="${esc(m.id)}">${esc(m.label)}</option>`).join('');
-  $('#model').value = p.model ?? (d.engine === 'claude' ? d.model : '');
+  $('#model').value = p.model ?? (d.engine === 'claude' || menu.some((m) => m.id === d.model) ? d.model : '');
   const efforts = menu.find((m) => m.id === $('#model').value)?.efforts ?? [];
   $('#effort').hidden = !efforts.length;
   $('#effort').innerHTML = efforts.map((e) => `<option value="${e}">思考 · ${EFF[e] ?? e}</option>`).join('');
@@ -355,7 +355,7 @@ function fillModels(c, p = prefs[c] || {}) {
 }
 const modelLabel = (k) => { const x = META.chars[k], m = (prefs[k] || {}).model;
   if (x.engine === 'claude') return modelName(m || x.model);
-  return menuOf(k)?.find((o) => o.id === m)?.label ?? x.model; };
+  return menuOf(k)?.find((o) => o.id === (m ?? x.model))?.label ?? x.model; };
 function savePref() { prefs[char] = { model: $('#model').value, effort: $('#effort').value }; localStorage.setItem('prefs', JSON.stringify(prefs)); pick(char); }
 
 async function loadThreads() {

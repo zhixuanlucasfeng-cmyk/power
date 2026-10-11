@@ -268,8 +268,11 @@ async function send(req, res) {
   // Claude: our model list. Engines with a model menu (Codex): the user's pick, validated. Others: their own default.
   const menu = c ? engineChoices()[c.engine] : null;
   const picked = menu?.find((m) => m.id === body.model);
-  const model = c?.engine === 'claude' ? body.model || c.model : picked ? picked.id : c?.model;
-  const effort = c?.engine === 'claude' ? body.effort || c.effort || 'medium' : picked?.efforts.includes(body.effort) ? body.effort : undefined;
+  // body.model === '' means "the agent's own default"; no model at all means "this character's default".
+  const model = c?.engine === 'claude' ? body.model || c.model : body.model === '' ? undefined : picked ? picked.id : c?.model;
+  const m = menu?.find((x) => x.id === model);
+  const effort = c?.engine === 'claude' ? body.effort || c.effort || 'medium'
+    : m ? (m.efforts.includes(body.effort) ? body.effort : m.efforts.includes(c.effort) ? c.effort : undefined) : undefined;
   if (c?.engine === 'claude' && (!MODELS[model] || !EFFORTS.has(effort))) return json(res, 400, { error: 'bad model' });
   if (body.dir) t.dir = body.dir;
   t.dir ??= loadSettings().defaultDir || homedir();
