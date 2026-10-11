@@ -93,6 +93,12 @@
   .stack.big .badge.sm { width:30px; height:30px; font-size:14px; border-radius:9px; margin-right:-10px; }
   .stack.big { margin-right:14px; }
   .th.grp { display:flex; align-items:center; }
+  .cmenu { position:fixed; z-index:50; min-width:200px; padding:5px; border-radius:12px; background:#1b1e30f2; backdrop-filter:blur(18px); border:1px solid #3a3f63; box-shadow:0 12px 40px #000a; font-size:13.5px; }
+  .cmenu .mi { display:flex; align-items:center; gap:8px; padding:6px 10px; border-radius:8px; cursor:default; white-space:nowrap; }
+  .cmenu .mi span { width:18px; text-align:center; opacity:.8; } .cmenu .mi b { margin-left:auto; font-weight:400; opacity:.6; padding-left:14px; }
+  .cmenu .mi:hover { background:#ffffff14; } .cmenu .mi.danger { color:#ff8a6a; } .cmenu hr { border:0; border-top:1px solid #ffffff14; margin:4px 6px; }
+  .unread { width:8px; height:8px; border-radius:50%; background:#4c9bff; margin-left:auto; flex:none; box-shadow:0 0 8px #4c9bff; display:inline-block; }
+  .th .unread { margin-left:6px; vertical-align:middle; }
   .gtag { display:inline-block; font-size:10.5px; line-height:1.5; padding:0 6px; border-radius:6px; border:1px solid color-mix(in srgb, var(--k, var(--c)) 45%, transparent); color:color-mix(in srgb, var(--k, var(--c)) 80%, var(--text)); margin-right:3px; }
   .ch.grp { --k:var(--pink); } .ch.grp .stack { margin-right:4px; flex:none; } .ch .who2 small { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; display:block; }
   .ch.grp .who2 b { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
@@ -396,33 +402,100 @@ const base = (d) => (short(d) === '~' ? '主目录 ~' : d.split('/').filter(Bool
 let renaming = false;
 function renderTree() {
   if (!META || renaming) return;
-  // One WeChat-style list: people and group chats together, most recent conversation on top; the group
-  // (公安 / 校园 / …) is a tag under each name instead of a section you have to scroll to.
-  const last = {};
-  for (const t of THREADS) if (t.char && !(last[t.char] > t.updated)) last[t.char] = t.updated;
+  // One WeChat-style list: pinned chats first, then people and group chats by latest message; the group
+  // (公安 / 校园 / …) is a tag under each name. Archived chats are hidden (⚙️ 设置 → 数据).
+  const live = THREADS.filter((t) => !t.archived);
+  const last = {}, unreadBy = {};
+  for (const t of live) if (t.char) { if (!(last[t.char] > t.updated)) last[t.char] = t.updated; if (t.unread && t.id !== cur) unreadBy[t.char] = true; }
+  const dotU = (on) => (on ? '<i class="unread" title="未读"></i>' : '');
+  const pinned = live.filter((t) => t.pinned);
   const items = [
-    ...THREADS.filter((t) => t.members?.length > 1).map((t) => ({ kind: 'group', t, at: t.updated })),
+    ...live.filter((t) => t.members?.length > 1 && !t.pinned).map((t) => ({ kind: 'group', t, at: t.updated })),
     ...visible().map(([k, x]) => ({ kind: 'char', k, x, at: last[k] ?? '' })),
   ].sort((a, b) => b.at.localeCompare(a.at)); // stable: never-used characters keep the pack's order
+  const groupRow = (t) => `<div class="ch grp ${t.id === cur ? 'on' : ''}" data-act="thread" data-id="${t.id}"><span class="stack">${t.members.slice(0, 3).map((m) => badge(m, true)).join('')}</span>` +
+    `<div class="who2"><b>${t.running ? '<span class="dot"></span>' : ''}${t.pinned ? '📌 ' : ''}${esc(t.title)}</b><small><span class="gtag">群聊</span> ${t.members.length} 人 · ${esc(t.members.map(nm).join('、'))}</small></div>${dotU(t.unread && t.id !== cur)}</div>`;
+  const pinRow = (t) => t.members?.length > 1 ? groupRow(t)
+    : `<div class="ch ${t.id === cur ? 'on' : ''}" data-act="thread" data-id="${t.id}" style="--k:${look(t.char).k}">${badge(t.char, true)}<div class="who2"><b>${t.running ? '<span class="dot"></span>' : ''}📌 ${esc(t.title)}</b><small><span class="gtag">${esc(nm(t.char))}</span> ${esc(base(t.dir ?? '~'))}</small></div>${dotU(t.unread && t.id !== cur)}</div>`;
   const head = `<div class="sec">聊天 <span><button class="mini" data-act="newgroup" title="新群聊">＋ 群聊</button> <button class="mini" data-act="rescan" title="重新扫描本机 Agent">🔍</button></span></div>`;
-  $('#tree').innerHTML = head + items.map((it) => {
-    if (it.kind === 'group') {
-      const t = it.t;
-      return `<div class="ch grp ${t.id === cur ? 'on' : ''}" data-act="thread" data-id="${t.id}"><span class="stack">${t.members.slice(0, 3).map((m) => badge(m, true)).join('')}</span>` +
-        `<div class="who2"><b>${t.running ? '<span class="dot"></span>' : ''}${esc(t.title)}</b><small><span class="gtag">群聊</span> ${t.members.length} 人 · ${esc(t.members.map(nm).join('、'))}</small></div></div>`;
-    }
+  $('#tree').innerHTML = (pinned.length ? `<div class="sec">置顶</div>` + pinned.map(pinRow).join('') : '') + head + items.map((it) => {
+    if (it.kind === 'group') return groupRow(it.t);
     const { k, x } = it, isOpen = open_.has(k);
-    const row = `<div class="ch ${k === char ? 'on' : ''}" data-act="char" data-c="${k}" style="--k:${look(k).k}">${badge(k, true)}<div class="who2"><b>${esc(nm(k))}</b><small><span class="gtag">${esc(x.group)}</span> ${esc(x.role)} · ${esc(modelLabel(k))}</small></div><span class="car">${isOpen ? '▾' : '▸'}</span></div>`;
+    const row = `<div class="ch ${k === char ? 'on' : ''}" data-act="char" data-c="${k}" style="--k:${look(k).k}">${badge(k, true)}<div class="who2"><b>${esc(nm(k))}</b><small><span class="gtag">${esc(x.group)}</span> ${esc(x.role)} · ${esc(modelLabel(k))}</small></div>${dotU(unreadBy[k])}<span class="car">${isOpen ? '▾' : '▸'}</span></div>`;
     if (!isOpen) return row;
     const projs = (PROJECTS[k] || []).map((d) => {
-      const ts = THREADS.filter((t) => t.char === k && t.dir === d);
+      const ts = live.filter((t) => t.char === k && t.dir === d);
       const here = k === char && d === dir;
       return `<div class="proj ${here && !cur ? 'on' : ''}" data-act="proj" data-k="${k}" data-d="${esc(d)}" title="${esc(short(d))}"><span>📁 ${esc(base(d))}</span>` +
         `<span class="acts"><i data-act="newin" title="新对话">＋</i>${short(d) === '~' ? '' : '<i data-act="rmproj" title="从列表移除（不删文件）">×</i>'}</span></div>` +
-        ts.map((t) => `<div class="th ${t.id === cur ? 'on' : ''}" data-act="thread" data-id="${t.id}">${t.running ? '<span class="dot"></span>' : ''}${esc(t.title)}</div>`).join('');
+        ts.map((t) => `<div class="th ${t.id === cur ? 'on' : ''}" data-act="thread" data-id="${t.id}">${t.running ? '<span class="dot"></span>' : ''}${t.pinned ? '📌 ' : ''}${esc(t.title)}${dotU(t.unread && t.id !== cur)}</div>`).join('');
     }).join('');
     return row + `<div class="kids" style="--k:${look(k).k}">${projs}<div class="proj add" data-act="addproj" data-k="${k}">＋ 添加项目文件夹</div></div>`;
   }).join('');
+}
+
+// Right-click menus (like Codex): on a chat — rename, pin, unread, move to project, fork, copy, open folder,
+// archive, delete; on a character — new chat, persona, group, avatar, hide.
+const meta = (id, patch) => fetch('/api/thread-meta', { method: 'POST', body: JSON.stringify({ id, ...patch }) }).then(async (r) => { if (!r.ok) alert((await r.json()).error); return loadThreads(); });
+function closeMenu() { document.querySelectorAll('.cmenu').forEach((m) => m.remove()); }
+function showMenu(x, y, items, parent) {
+  const m = document.createElement('div'); m.className = 'cmenu';
+  m.innerHTML = items.map((it, i) => it === '-' ? '<hr>' : `<div class="mi ${it.danger ? 'danger' : ''} ${it.sub ? 'has' : ''}" data-i="${i}"><span>${it.icon ?? ''}</span>${esc(it.label)}${it.sub ? '<b>›</b>' : ''}</div>`).join('');
+  document.body.append(m);
+  const r = m.getBoundingClientRect();
+  m.style.left = Math.min(x, innerWidth - r.width - 8) + 'px'; m.style.top = Math.min(y, innerHeight - r.height - 8) + 'px';
+  m.onmouseover = (e) => {
+    const el = e.target.closest('.mi'); if (!el) return;
+    m.querySelectorAll('.cmenu.sub').forEach((s) => s.remove());
+    [...document.querySelectorAll('.cmenu')].filter((c) => c !== m && c._parent === m).forEach((c) => c.remove());
+    const it = items[el.dataset.i];
+    if (it.sub) { const b = el.getBoundingClientRect(); const sm = showMenu(b.right + 2, b.top - 4, it.sub, m); sm._parent = m; }
+  };
+  m.onclick = async (e) => {
+    const el = e.target.closest('.mi'); if (!el) return;
+    const it = items[el.dataset.i]; if (it.sub) return;
+    if (it.confirm && !el.dataset.armed) { el.dataset.armed = 1; el.innerHTML = `<span>⚠️</span>${esc(it.confirm)}`; return; }
+    closeMenu(); await it.run?.();
+  };
+  void parent;
+  return m;
+}
+document.addEventListener('click', (e) => { if (!e.target.closest('.cmenu')) closeMenu(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMenu(); });
+function threadMenu(id, x, y) {
+  const t = THREADS.find((z) => z.id === id); if (!t) return;
+  const projs = t.members?.length > 1 ? [] : (PROJECTS[t.char] || []);
+  showMenu(x, y, [
+    { icon: '✎', label: '重命名', run: () => renameThread(id) },
+    { icon: '📌', label: t.pinned ? '取消置顶' : '置顶', run: () => meta(id, { pinned: !t.pinned }) },
+    { icon: '●', label: t.unread ? '标为已读' : '标为未读', run: () => meta(id, { unread: !t.unread }) },
+    ...(projs.length ? [{ icon: '📁', label: '移到项目', sub: [...projs.map((d) => ({ icon: d === t.dir ? '✓' : '', label: base(d), run: () => meta(id, { dir: d }) })), '-',
+      { icon: '＋', label: '新的项目文件夹…', run: () => pickFolder(async (d) => { await addProject(t.char, d); meta(id, { dir: d }); }) }] }] : []),
+    { icon: '⑂', label: '分叉一份', run: async () => { const r = await (await fetch('/api/fork', { method: 'POST', body: JSON.stringify({ id }) })).json(); await loadThreads(); open(r.id); } },
+    '-',
+    { icon: '⧉', label: '复制', sub: [
+      { label: '对话内容（Markdown）', run: async () => navigator.clipboard.writeText(await (await fetch('/api/markdown/' + id)).text()) },
+      { label: '文件夹路径', run: () => navigator.clipboard.writeText(t.dir ?? '') },
+      { label: '对话 ID', run: () => navigator.clipboard.writeText(id) }] },
+    { icon: '↗', label: '在 Finder 中打开文件夹', run: () => fetch('/api/open-folder', { method: 'POST', body: JSON.stringify({ id }) }) },
+    '-',
+    { icon: '🗄', label: '归档', run: async () => { await meta(id, { archived: true }); if (cur === id) { cur = null; hero(); } } },
+    { icon: '🗑', label: '永久删除', danger: true, confirm: '再点一次：永久删除', run: async () => {
+      const r = await fetch('/api/delete-thread', { method: 'POST', body: JSON.stringify({ id }) });
+      if (!r.ok) return alert((await r.json()).error);
+      if (cur === id) { cur = null; hero(); } loadThreads(); } },
+  ]);
+}
+function charMenu(k, x, y) {
+  const groups = [...new Set(Object.values(META.chars).map((c) => c.group))];
+  showMenu(x, y, [
+    { icon: '＋', label: '新对话', run: () => newChat(k, META.settings.defaultDir || META.home) },
+    { icon: '✏️', label: '编辑人设', run: async () => { settingsPage(); setTimeout(() => document.querySelector(`[data-edit="${k}"]`)?.click(), 300); } },
+    { icon: '🗂', label: '移到分组', sub: groups.map((g) => ({ icon: g === META.chars[k].group ? '✓' : '', label: g, run: () => saveSetting({ charGroups: { ...META.settings.charGroups, [k]: g } }) })) },
+    { icon: '🖼', label: '换头像…', run: () => document.querySelector(`#tree [data-c="${k}"] .badge`)?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true })) },
+    '-',
+    { icon: '🙈', label: '隐藏这个角色', run: () => saveSetting({ hidden: [...new Set([...META.settings.hidden, k])] }) },
+  ]);
 }
 
 function pickFolder(cb) {
@@ -548,6 +621,8 @@ function settingsPage() {
     <h2>数据</h2>
     <div class="scard">
       <div class="srow"><div class="sinfo"><b>数据文件夹</b><small><code>~/.power</code>：对话、记忆、技能、头像、设置都在这里</small></div><button id="sopen">在 Finder 打开</button></div>
+      <div class="srow"><div class="sinfo"><b>已归档的对话</b><small>${THREADS.filter((t) => t.archived).length ? '右键归档的对话在这里，可以恢复' : '没有'}</small></div></div>
+      ${THREADS.filter((t) => t.archived).map((t) => `<div class="srow"><div class="sinfo"><b>${esc(t.title)}</b><small>${esc(t.members?.length > 1 ? t.members.map(nm).join('、') : nm(t.char))} · ${new Date(t.updated).toLocaleDateString('zh-CN')}</small></div><button class="mini" data-unarch="${t.id}">恢复</button></div>`).join('')}
       <div class="srow"><div class="sinfo"><b>清空所有对话</b><small>记忆和技能不受影响</small></div><button id="sclear" class="danger">清空</button></div>
     </div>
     <p class="meta" style="text-align:center;margin:26px 0 10px">Power v${esc(META.version)} · MIT License · 每个 Agent 用它自己的登录和额度在你本机运行</p>
@@ -619,6 +694,7 @@ function settingsPage() {
         when: every ? { type: 'every', minutes: Number($('#sc-min').value) } : { type: 'daily', time: $('#sc-time').value } }) });
       $('#sc-text').value = ''; $('#sc-name').value = ''; loadScheds();
     }
+    else if (el.dataset.unarch) { await meta(el.dataset.unarch, { archived: false }); settingsPage(); }
     else if (el.dataset.scrun) { await fetch('/api/schedules/run', { method: 'POST', body: JSON.stringify({ id: el.dataset.scrun }) }); el.textContent = '已开始'; }
     else if (el.dataset.scdel) { await fetch('/api/schedules/delete', { method: 'POST', body: JSON.stringify({ id: el.dataset.scdel }) }); loadScheds(); }
     else if (el.id === 'tg-save') { const r = await fetch('/api/telegram', { method: 'POST', body: JSON.stringify({ token: $('#tg-token').value }) }); loadTg(); }
@@ -696,6 +772,12 @@ function switchTo(k) {
 }
 function newChat(k, d) { cur = null; group = null; setBusy(false); if (k !== char) pick(k); setDir(d); hero(); renderTree(); $('#input').focus(); }
 
+$('#tree').addEventListener('contextmenu', (e) => {
+  const th = e.target.closest('[data-act="thread"]'), ch = e.target.closest('[data-act="char"]');
+  if (!th && !ch) return;
+  e.preventDefault(); closeMenu();
+  th ? threadMenu(th.dataset.id, e.clientX, e.clientY) : charMenu(ch.dataset.c, e.clientX, e.clientY);
+});
 $('#tree').onclick = async (e) => {
   const el = e.target.closest('[data-act]'); if (!el) return;
   const row = el.closest('.proj'), act = el.dataset.act;
@@ -719,6 +801,7 @@ $('#tree').onclick = async (e) => {
 
 async function open(id) {
   cur = id; setBusy(false); $('#chat').onclick = $('#chat').onchange = null;
+  if (THREADS.find((t) => t.id === id)?.unread) fetch('/api/thread-meta', { method: 'POST', body: JSON.stringify({ id, unread: false }) });
   const t = await (await fetch('/api/thread/' + id)).json();
   $('#chat').innerHTML = ''; turn = null; t.events.forEach(render);
   if (t.members?.length > 1) { group = { members: t.members, rounds: 1, mode: t.mode ?? 'all' }; groupHeader(t.members, t.title); }

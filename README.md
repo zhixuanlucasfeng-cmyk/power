@@ -20,6 +20,7 @@
 - **Scheduled tasks.** "Every day at 08:00, have Nayuta summarize my unread WeChat"; you get a notification with the result.
 - **Phone (Telegram).** Pair a bot you create with @BotFather; message the crew from your phone, and tap Send/Cancel on confirmation cards there.
 - **Send confirmation cards.** Before an agent sends a message or post for you it calls `confirm_send`; a card pops up in the app (and on your phone) and nothing goes out until you tap Send.
+- **Right-click menus.** On a chat: rename, pin, mark unread, move to a project, fork, copy (Markdown / path / id), open its folder, archive, delete. On a character: new chat, edit persona, move group, change avatar, hide.
 - **Keeps running.** The server is a launchd agent (`power service ensure`), so closing the window never cuts off a chat; it notifies you when long replies finish. Interface in 中文 or English.
 
 | | |

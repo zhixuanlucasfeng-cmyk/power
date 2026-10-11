@@ -154,7 +154,7 @@ for (const f of readdirSync(THREADS).filter((x) => x.endsWith('.json'))) {
 
 function listThreads() {
   return readdirSync(THREADS).filter((f) => f.endsWith('.json'))
-    .map((f) => { const t = loadThread(f.slice(0, -5)); return { id: t.id, title: t.title, updated: t.updated, running: running.has(t.id), char: t.char ?? t.events.find((e) => e.t === 'user')?.char, dir: t.dir, members: t.members }; })
+    .map((f) => { const t = loadThread(f.slice(0, -5)); return { id: t.id, title: t.title, updated: t.updated, running: running.has(t.id), char: t.char ?? t.events.find((e) => e.t === 'user')?.char, dir: t.dir, members: t.members, pinned: !!t.pinned, unread: !!t.unread, archived: !!t.archived }; })
     .sort((a, b) => b.updated.localeCompare(a.updated));
 }
 
@@ -397,7 +397,7 @@ async function runChat(prep, sink = () => {}) {
     if (!group) {
       const a = ADAPTERS[c.engine];
       const session = a.session ? t.sessions[char] : null;
-      const prompt = (a.session ? text : withHistory(t, text)) + filesNote(files);
+      const prompt = (a.session && session ? text : withHistory(t, text)) + filesNote(files);
       let result = await runTurn(t, c, { prompt, session, model, effort, ask: text, files }, emit, hold);
       if (result.writerConflict) {
         // Another Codex process owns this saved session. Keep Power's transcript, discard only the
@@ -436,6 +436,7 @@ async function runChat(prep, sink = () => {}) {
   } finally {
     running.delete(t.id);
     t.updated = new Date().toISOString();
+    t.unread = true;
     saveThread(t);
   }
   const reply = lastReply(t);
@@ -602,6 +603,45 @@ createServer(async (req, res) => {
     if (p === '/api/projects') {
       const p = loadProjects();
       return json(res, 200, Object.fromEntries(Object.keys(allChars()).map((c) => [c, p[c] ?? [homedir()]])));
+    }
+    // Right-click menu on a chat: pin, unread, archive, move to a project folder, fork, delete, open folder, copy.
+    if (p === '/api/thread-meta' && req.method === 'POST') {
+      const b = await readBody(req);
+      if (!ID_RE.test(b.id ?? '') || !existsSync(threadFile(b.id))) return json(res, 404, {});
+      if (running.has(b.id) && 'dir' in b) return json(res, 409, { error: '还在跑，等它说完再移动' });
+      const t = loadThread(b.id);
+      for (const k of ['pinned', 'unread', 'archived']) if (typeof b[k] === 'boolean') t[k] = b[k];
+      if (typeof b.dir === 'string') { if (!existsSync(b.dir)) return json(res, 400, { error: `文件夹不存在：${b.dir}` }); t.dir = b.dir; if (t.char) addProject(t.char, b.dir); }
+      saveThread(t);
+      return json(res, 200, {});
+    }
+    if (p === '/api/fork' && req.method === 'POST') {
+      const { id } = await readBody(req);
+      if (!ID_RE.test(id ?? '') || !existsSync(threadFile(id))) return json(res, 404, {});
+      const t = loadThread(id);
+      // Same history, new id, no engine sessions: the next message starts fresh agents with the history inline.
+      const f = { ...t, id: randomUUID(), title: `${t.title}（分叉）`, sessions: {}, pinned: false, unread: false, archived: false, forkedFrom: id, updated: new Date().toISOString() };
+      saveThread(f);
+      return json(res, 200, { id: f.id });
+    }
+    if (p === '/api/delete-thread' && req.method === 'POST') {
+      const { id } = await readBody(req);
+      if (!ID_RE.test(id ?? '') || !existsSync(threadFile(id))) return json(res, 404, {});
+      if (running.has(id)) return json(res, 409, { error: '还在跑，先停下来再删' });
+      unlinkSync(threadFile(id));
+      return json(res, 200, {});
+    }
+    if (p === '/api/open-folder' && req.method === 'POST') {
+      const { id } = await readBody(req);
+      const d = ID_RE.test(id ?? '') && existsSync(threadFile(id)) ? loadThread(id).dir : null;
+      if (d && existsSync(d)) spawn('open', [d]);
+      return json(res, 200, {});
+    }
+    if (p.startsWith('/api/markdown/')) {
+      const id = p.slice(14); if (!ID_RE.test(id) || !existsSync(threadFile(id))) return json(res, 404, {});
+      const t = loadThread(id);
+      const md = [`# ${t.title}`, '', ...transcript(t).map((l) => l.replace(/^([^:]+):\s*/, '**$1**: '))].join('\n\n');
+      res.writeHead(200, { 'content-type': 'text/markdown; charset=utf-8' }); return res.end(md);
     }
     if (p === '/api/rename' && req.method === 'POST') {
       const { id, title } = await readBody(req);

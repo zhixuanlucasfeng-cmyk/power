@@ -126,3 +126,20 @@ test('parsers: hermes live steps, boxed answer and resumable session', () => {
   assert.equal(out.at(-1).d, '本大爷查完了。\n第二行');
   assert.equal(st.session, '20261011_121238_5de87f');
 });
+
+test('right-click actions: pin, unread, archive, fork, delete', async () => {
+  const ev = await chat({ text: 'menu me', char: 'c-echo' });
+  const id = ev.find((e) => e.t === 'thread').id;
+  const row = async (x) => (await api('/api/threads')).find((t) => t.id === x);
+  assert.equal((await row(id)).unread, true); // a finished reply counts as unread until opened
+  await api('/api/thread-meta', { id, pinned: true, unread: false });
+  assert.deepEqual([(await row(id)).pinned, (await row(id)).unread], [true, false]);
+  const { id: forked } = await api('/api/fork', { id });
+  const f = await api(`/api/thread/${forked}`);
+  assert.match(f.title, /分叉/); assert.deepEqual(f.sessions, {}); assert.equal(f.events.length, (await api(`/api/thread/${id}`)).events.length);
+  await api('/api/thread-meta', { id: forked, archived: true });
+  assert.equal((await row(forked)).archived, true);
+  await api('/api/delete-thread', { id: forked });
+  assert.equal(await row(forked), undefined);
+  assert.match(await (await fetch(`${url}/api/markdown/${id}`)).text(), /menu me/);
+});
