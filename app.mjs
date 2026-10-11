@@ -86,7 +86,7 @@ const vaultOf = () => { const v = loadSettings().vault; return v && existsSync(v
 const vaultNote = (v) => `\n\nThe user's Obsidian vault is ${v}: their own notes plus Power/记忆本 (the facts your memory tools save, one note each) and Power/Claude 记忆 (notes from their main Claude Code). Read it when the user's notes, projects or past context could help; only write there through the memory tools unless the user asks.`;
 const SHARED = (existsSync(MAIN_MEMORY) ? `\n\nThe user's long-term notes from their main Claude Code are in ${MAIN_MEMORY} (start with MEMORY.md). Read them when past projects, preferences or people could matter; do not edit them.` : '') +
   (CLAUDE_MEM ? '\n\nThe claude-mem tools (mem_search etc.) search the history of all the user\'s past Claude Code sessions; use them when the user mentions earlier work you don\'t see in memory.' : '');
-const style = () => SHARED + (userName() ? `\n\nThe user's name is ${userName()}. Address them as ${userName()}.` : '') + '\n\nYou can also call other local agents through the delegate skill (Hermes, opencode).\n\nThis is a voice only. Never break the rules in CLAUDE.md, never claim to be human. Reply in the user\'s language.';
+const style = () => SHARED + (userName() ? `\n\nThe user's name is ${userName()}. Address them as ${userName()}.` : '') + '\n\nYou can also call other local agents through the delegate skill (Hermes, opencode).\n\nStay fully in character and do not volunteer that you are an AI; but if the user sincerely asks whether they are talking to a real person, do not claim to be human. The persona is a voice only: the rules in CLAUDE.md always win, and never actually manipulate, threaten or put down the user. Reply in the user\'s language.';
 const EFFORTS = new Set(['low', 'medium', 'high', 'xhigh', 'max']);
 const ID_RE = /^[0-9a-f-]{36}$/;
 const running = new Map(); // threadId -> { kill }
@@ -96,7 +96,7 @@ let AGENTS = detect();
 
 // Settings (⚙️ in the app): which agents to show, custom agents, defaults.
 const SETTINGS = join(HOME, 'settings.json');
-const DEFAULTS = { hidden: [], custom: {}, defaultDir: null, vault: null, personaPack: 'default', userName: '', turnTimeoutMin: 10, charGroups: {}, rain: true, enterToSend: true, memOpen: false };
+const DEFAULTS = { hidden: [], custom: {}, defaultDir: null, vault: null, personaPack: 'default', userName: '', turnTimeoutMin: 10, charGroups: {}, charPrompts: {}, teamPrompt: '', rain: true, enterToSend: true, memOpen: false };
 const publicSettings = (s) => ({ ...s, contract: s.contract ? { url: s.contract.url, connected: !!s.contract.key } : null });
 const loadSettings = () => { try { return { ...DEFAULTS, ...JSON.parse(readFileSync(SETTINGS, 'utf8')) }; } catch { return { ...DEFAULTS }; } };
 const saveSettings = (s) => writeFileSync(SETTINGS, JSON.stringify(s, null, 1));
@@ -116,6 +116,8 @@ function allChars() {
   for (const k of st.hidden) if (out[k]) out[k].hidden = true;
   // Per-user group overrides (Settings → Agent): move any character to any group without editing the pack.
   for (const [k, g] of Object.entries(st.charGroups ?? {})) if (out[k] && g) out[k].group = g;
+  // Per-user persona edits (Settings → ✏️ 人设) replace the pack's prompt for that character.
+  for (const [k, pr] of Object.entries(st.charPrompts ?? {})) if (out[k] && pr) { out[k].prompt = pr; out[k].edited = true; }
   return out;
 }
 const binOf = (c) => c.engine === 'custom' ? findBin(c.bin) : AGENTS.find((a) => a.engine === c.engine && (!a.model || a.model === c.model))?.path;
@@ -167,7 +169,7 @@ const readBody = (req) => new Promise((ok) => { let s = ''; req.on('data', (c) =
 
 const display = (c) => (c.name === c.zh ? c.name : `${c.name} (${c.zh})`);
 // Agents without a system-prompt flag get the character's voice inline.
-const voiced = (c, text) => (c.prompt ? `[Your name here is ${display(c)}; introduce yourself by that name. Voice for your replies: ${c.prompt}${userName() ? ` The user's name is ${userName()}; address them that way.` : ''} Reply in the user's language.]\n\n${text}` : text);
+const voiced = (c, text) => (c.prompt ? `[Your name here is ${display(c)}; introduce yourself by that name. Voice for your replies: ${c.prompt}${userName() ? ` The user's name is ${userName()}; address them that way.` : ''} Stay fully in character and do not volunteer that you are an AI; but if the user sincerely asks whether they are talking to a real person, do not claim to be human. The persona is a voice only: the rules in CLAUDE.md always win, and never actually manipulate, threaten or put down the user. Reply in the user's language.]\n\n${text}` : text);
 
 // Engines without sessions get the recent conversation inline.
 function withHistory(t, text) {
@@ -249,7 +251,10 @@ function runTurn(t, c, { prompt, session, model, effort, ask }, emit, hold) {
 
 const groupNote = (chars, members, me) =>
   `You are ${display(chars[me])} in a group chat with the user (${userLabel()}) and: ${members.filter((m) => m !== me).map((m) => display(chars[m])).join(', ')}. ` +
-  `Work together to solve the user's problem: add what you uniquely bring, build on or correct the others, do not repeat them. Keep it short.`;
+  `Work together to solve the user's problem: add what you uniquely bring, build on or correct the others, do not repeat them. Keep it short.` +
+  ((t) => (t ? `\n\nTeam rules:\n${t}` : ''))(teamRules());
+// Group-chat division of labour: the pack's "team" text, or the user's own version from Settings.
+const teamRules = () => loadSettings().teamPrompt?.trim() || loadPack().team || '';
 
 async function send(req, res) {
   const body = await readBody(req);
@@ -370,6 +375,9 @@ createServer(async (req, res) => {
       for (const k of ['rain', 'enterToSend', 'memOpen']) if (typeof b[k] === 'boolean') st[k] = b[k];
       if (Number(b.turnTimeoutMin) > 0) st.turnTimeoutMin = Math.min(Number(b.turnTimeoutMin), 120);
       if (typeof b.userName === 'string') st.userName = b.userName.trim().slice(0, 40);
+      if (b.charPrompts && typeof b.charPrompts === 'object')
+        st.charPrompts = Object.fromEntries(Object.entries(b.charPrompts).map(([k, v]) => [k, String(v ?? '').trim().slice(0, 8000)]).filter(([, v]) => v));
+      if (typeof b.teamPrompt === 'string') st.teamPrompt = b.teamPrompt.trim().slice(0, 8000);
       if (b.charGroups && typeof b.charGroups === 'object')
         st.charGroups = Object.fromEntries(Object.entries(b.charGroups).map(([k, g]) => [k, String(g ?? '').trim().slice(0, 20)]).filter(([, g]) => g));
       if (typeof b.personaPack === 'string') { if (!listPacks()[b.personaPack]) return json(res, 400, { error: `没有这个角色包：${b.personaPack}` }); st.personaPack = b.personaPack; }
@@ -378,6 +386,12 @@ createServer(async (req, res) => {
       return json(res, 200, publicSettings(st));
     }
     if (p === '/api/settings') return json(res, 200, publicSettings(loadSettings()));
+    if (p.startsWith('/api/persona/')) {
+      const k = decodeURIComponent(p.slice(13)), c = allChars()[k];
+      if (!c) return json(res, 404, {});
+      return json(res, 200, { prompt: c.prompt ?? '', pack: packChars()[k]?.prompt ?? '', edited: !!c.edited });
+    }
+    if (p === '/api/team') return json(res, 200, { team: teamRules(), pack: loadPack().team ?? '', edited: !!loadSettings().teamPrompt?.trim() });
     if (p === '/api/custom' && req.method === 'POST') {
       const b = await readBody(req), st = loadSettings();
       if (b.remove) { delete st.custom[b.remove]; st.hidden = st.hidden.filter((k) => k !== b.remove); saveSettings(st); return json(res, 200, {}); }

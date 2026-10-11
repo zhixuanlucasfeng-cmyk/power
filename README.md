@@ -47,6 +47,8 @@ Everything lives in **⚙️ Settings**:
 
 - **Persona pack:** `personas/default.json` (original crew), `personas/chainsaw-man.json` (a fan-made example), or your own in `~/.power/personas/`.
 - **Your name:** what the crew calls you.
+- **✏️ Persona:** rewrite any character's prompt (voice, attitude, what they're in charge of), or restore the pack's original.
+- **Group-chat team rules:** who leads which kind of question and how the others chip in.
 - **Agents:** turn each detected agent on or off, move it to any group (or a new one), rescan, hide all local models, or add a custom CLI.
 - **Obsidian vault:** memory notes go to `<vault>/Power/记忆本/`.
 - **Default folder, send key, and so on.**
@@ -64,7 +66,8 @@ Data stays on your machine in `~/.power`: chats, settings, and pictures you drop
       "look": { "k": "#d9a441", "g": "P" } },
     "coder": { "group": "Outside", "engine": "codex", "name": "Coder", "zh": "Coder", "role": "Codex", "model": "default",
       "prompt": "Terse senior engineer." }
-  }
+  },
+  "team": "Planner leads strategy questions; Coder reviews anything technical. Keep simple answers short."
 }
 ```
 
