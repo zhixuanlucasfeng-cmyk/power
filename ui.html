@@ -296,9 +296,10 @@ function render(e) {
     const last = turn.lastElementChild;
     if (e.t === 'text' && last?.classList.contains('text')) { last._raw += e.d; last.innerHTML = md(last._raw); }
     else { const d = document.createElement('div'); d.className = 'text'; d._raw = e.d || ''; d.innerHTML = md(d._raw); turn.append(d); }
-  } else if (e.t === 'thinking') {
+  } else if (e.t === 'thinking' || e.t === 'wait') {
     const th = turn.querySelector('.think');
-    const label = `<i></i>思考中${e.n ? ` · ${e.n} tokens` : '…'}`;
+    const mmss = (x) => (x >= 60 ? `${Math.floor(x / 60)} 分 ${x % 60} 秒` : `${x} 秒`);
+    const label = e.t === 'wait' ? `<i></i>${esc(e.who)} 还在做 · ${mmss(e.s)}（这个 Agent 做完才一次性回复）` : `<i></i>思考中${e.n ? ` · ${e.n} tokens` : '…'}`;
     if (th && th === turn.lastElementChild) th.innerHTML = label;
     else { th?.remove(); turn.insertAdjacentHTML('beforeend', `<div class="think">${label}</div>`); }
   } else if (e.t === 'tool') {
@@ -433,6 +434,7 @@ function settingsPage() {
       <div class="srow"><div class="sinfo"><b>默认工作文件夹</b><small>新对话默认在这里读写文件</small></div><button id="sdir">📁 ${esc(st.defaultDir ? short(st.defaultDir) : '~ 主目录')}</button>${st.defaultDir ? '<button class="mini" id="sdirx">恢复默认</button>' : ''}</div>
       <div class="srow"><div class="sinfo"><b>角色包</b><small>personas/ 里的 JSON；也可以把自己的放进 ~/.power/personas/</small></div><select id="spack">${Object.entries(META.packs).map(([k, n]) => `<option value="${esc(k)}" ${k === (st.personaPack || 'default') ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select></div>
       <div class="srow"><div class="sinfo"><b>你的称呼</b><small>角色们怎么叫你；留空就不特别称呼</small></div><input id="sname" value="${esc(st.userName || '')}" placeholder="比如：老板" style="padding:6px 10px;border-radius:8px;border:1px solid var(--line);background:#06070f;color:var(--text);font:inherit;width:160px"></div>
+      <div class="srow"><div class="sinfo"><b>单轮时间上限</b><small>一个 Agent 一轮超过这么久就停止，群聊接着往下走</small></div><select id="slimit">${[5, 10, 20, 30, 60].map((m) => `<option value="${m}" ${m === (st.turnTimeoutMin || 10) ? 'selected' : ''}>${m} 分钟</option>`).join('')}</select></div>
       <div class="srow"><div class="sinfo"><b>回车直接发送</b><small>关掉后用 ⌘Enter 发送，Enter 换行</small></div><label class="sw"><input type="checkbox" data-set="enterToSend" ${st.enterToSend ? 'checked' : ''}><span></span></label></div>
       <div class="srow"><div class="sinfo"><b>下雨动画</b><small>背景的雨夜动画</small></div><label class="sw"><input type="checkbox" data-set="rain" ${st.rain ? 'checked' : ''}><span></span></label></div>
       <div class="srow"><div class="sinfo"><b>启动时打开记忆本</b></div><label class="sw"><input type="checkbox" data-set="memOpen" ${st.memOpen ? 'checked' : ''}><span></span></label></div>
@@ -470,6 +472,7 @@ function settingsPage() {
     const el = e.target;
     if (el.id === 'spack') { await saveSetting({ personaPack: el.value }); META = await (await fetch('/api/meta')).json(); char = ''; settingsPage(); return; }
     if (el.id === 'sname') { await saveSetting({ userName: el.value }); return; }
+    if (el.id === 'slimit') { await saveSetting({ turnTimeoutMin: Number(el.value) }); return; }
     if (el.dataset.set) await saveSetting({ [el.dataset.set]: el.checked });
     else if (el.dataset.show) {
       const hidden = new Set(META.settings.hidden);
@@ -587,10 +590,12 @@ async function open(id) {
   loadThreads();
 }
 async function poll(id) {
+  let seen = -1;
   while (cur === id) {
     await new Promise((r) => setTimeout(r, 1500));
     const t = await (await fetch('/api/thread/' + id)).json();
     if (!t.running) { if (cur === id) open(id); return; }
+    if (cur === id && t.events.length !== seen) { seen = t.events.length; $('#chat').innerHTML = ''; turn = null; t.events.forEach(render); render({ t: 'thinking' }); }
   }
 }
 

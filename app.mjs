@@ -96,7 +96,7 @@ let AGENTS = detect();
 
 // Settings (⚙️ in the app): which agents to show, custom agents, defaults.
 const SETTINGS = join(HOME, 'settings.json');
-const DEFAULTS = { hidden: [], custom: {}, defaultDir: null, vault: null, personaPack: 'default', userName: '', rain: true, enterToSend: true, memOpen: false };
+const DEFAULTS = { hidden: [], custom: {}, defaultDir: null, vault: null, personaPack: 'default', userName: '', turnTimeoutMin: 10, rain: true, enterToSend: true, memOpen: false };
 const publicSettings = (s) => ({ ...s, contract: s.contract ? { url: s.contract.url, connected: !!s.contract.key } : null });
 const loadSettings = () => { try { return { ...DEFAULTS, ...JSON.parse(readFileSync(SETTINGS, 'utf8')) }; } catch { return { ...DEFAULTS }; } };
 const saveSettings = (s) => writeFileSync(SETTINGS, JSON.stringify(s, null, 1));
@@ -213,8 +213,18 @@ function runTurn(t, c, { prompt, session, model, effort, ask }, emit, hold) {
     const out = (e) => { if (e.t === 'done') done = true; emit(e); };
     const child = spawn(bin, cmd.args, { cwd: cmd.cwd ?? dir, env: { ...process.env, POWER_HOME: HOME }, stdio: ['ignore', 'pipe', 'pipe'] });
     hold(child);
+    // Agents like Hermes print nothing until they finish: send a heartbeat so the UI shows who is working and for how
+    // long, and stop a turn that runs past the limit so a group chat never waits forever.
+    const limitMs = (Number(loadSettings().turnTimeoutMin) || 10) * 60000;
+    let lastOut = Date.now(), timedOut = false;
+    const beat = setInterval(() => {
+      const ms = Date.now() - started;
+      if (ms > limitMs) { timedOut = true; child.kill('SIGTERM'); setTimeout(() => child.kill('SIGKILL'), 3000); return; }
+      if (Date.now() - lastOut >= 5000) emit({ t: 'wait', s: Math.round(ms / 1000), who: display(c) });
+    }, 5000);
     child.on('error', (e) => { stderr += `启动 ${bin} 失败：${e.message}`; });
     child.stdout.on('data', (chunk) => {
+      lastOut = Date.now();
       buf += chunk;
       let i;
       while ((i = buf.indexOf('\n')) >= 0) {
@@ -225,6 +235,8 @@ function runTurn(t, c, { prompt, session, model, effort, ask }, emit, hold) {
     });
     child.stderr.on('data', (chunk) => (stderr += chunk));
     child.on('close', (code) => {
+      clearInterval(beat);
+      if (timedOut) { out({ t: 'done', ms: Date.now() - started, error: `${display(c)} 超过 ${limitMs / 60000} 分钟还没完成，已停止（可在 ⚙️ 设置里调整上限）` }); return resolve(null); }
       plain += buf;
       if (!cmd.parse && strip(plain).trim()) { out({ t: 'text_start' }); out({ t: 'text', d: strip(plain).trim() }); }
       if (!done) out({ t: 'done', ms: Date.now() - started, error: code ? (strip(stderr).trim().slice(-500) || `已停止 (${code})`) : null });
@@ -274,7 +286,8 @@ async function send(req, res) {
     if (e.t === 'text' && last?.t === 'text') last.d += e.d;
     else if (e.t === 'text_start') { if (last?.t === 'text') t.events.push({ t: 'text', d: '' }); }
     else if (e.t === 'thinking') { if (last?.t === 'thinking') last.n = e.n; else t.events.push(e); }
-    else t.events.push({ ...e });
+    else if (e.t !== 'wait') t.events.push({ ...e }); // heartbeats are live-only
+    if (e.t === 'done') saveThread(t); // a reload mid-group-chat shows everyone who already answered
     res.write(JSON.stringify(e) + '\n');
   };
   emit({ t: 'thread', id: t.id, title: t.title, dir: t.dir, members: t.members });
@@ -350,6 +363,7 @@ createServer(async (req, res) => {
       if (Array.isArray(b.hidden)) st.hidden = b.hidden.filter((k) => typeof k === 'string');
       if ('defaultDir' in b) { if (b.defaultDir && !existsSync(b.defaultDir)) return json(res, 400, { error: `文件夹不存在：${b.defaultDir}` }); st.defaultDir = b.defaultDir || null; }
       for (const k of ['rain', 'enterToSend', 'memOpen']) if (typeof b[k] === 'boolean') st[k] = b[k];
+      if (Number(b.turnTimeoutMin) > 0) st.turnTimeoutMin = Math.min(Number(b.turnTimeoutMin), 120);
       if (typeof b.userName === 'string') st.userName = b.userName.trim().slice(0, 40);
       if (typeof b.personaPack === 'string') { if (!listPacks()[b.personaPack]) return json(res, 400, { error: `没有这个角色包：${b.personaPack}` }); st.personaPack = b.personaPack; }
       if ('vault' in b) { if (b.vault && !existsSync(b.vault)) return json(res, 400, { error: `文件夹不存在：${b.vault}` }); st.vault = b.vault || null; }
