@@ -13,6 +13,13 @@ const IMAGE = /\.(png|jpe?g|gif|webp)$/i;
 export const strip = (s) => String(s).replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '');
 const cut = (s) => strip(s).slice(0, 4000);
 export const isCodexWriterConflict = (error) => /thread-store conflict|already has an active writer/i.test(String(error ?? ''));
+// Codex snapshots its MCP tool list when a thread starts. Resuming that thread can drop
+// Power's dynamically injected tools, so replay Power's transcript into a fresh turn.
+export const sessionForTurn = (engine, savedSession) => engine === 'codex' ? null : savedSession ?? null;
+export const isCodexMissingPowerTool = (message) => {
+  const s = String(message ?? '');
+  return /confirm_send/i.test(s) && /(not a function|not callable|not available|missing|doesn['’]?t have|没有|缺少|无法调用|不可调用)/i.test(s);
+};
 
 // claude -p --output-format stream-json --include-partial-messages
 function parseClaude(ev, emit, st) {
@@ -72,7 +79,7 @@ function parseCodex(ev, emit, st) {
   else if (ev.type === 'item.started' && it.type === 'command_execution') emit({ t: 'tool', id: it.id, name: 'Bash', input: { command: it.command } });
   else if (ev.type === 'item.started' && it.type === 'reasoning') emit({ t: 'thinking' });
   else if (ev.type === 'item.completed') {
-    if (it.type === 'agent_message') { emit({ t: 'text_start' }); emit({ t: 'text', d: it.text }); }
+    if (it.type === 'agent_message') { st.text = `${st.text ?? ''}\n${it.text ?? ''}`; emit({ t: 'text_start' }); emit({ t: 'text', d: it.text }); }
     else if (it.type === 'command_execution') emit({ t: 'tool_result', id: it.id, out: cut(it.aggregated_output ?? ''), error: it.exit_code !== 0 });
     else if (it.type === 'file_change') {
       emit({ t: 'tool', id: it.id, name: 'Edit', input: { file_path: (it.changes ?? []).map((c) => `${c.kind} ${c.path}`).join(', ') } });
@@ -101,7 +108,8 @@ export const ADAPTERS = {
       const pick = [...(o.model ? ['-m', o.model] : []), ...(o.effort ? ['-c', `model_reasoning_effort="${o.effort}"`] : [])];
       // Extra tools (MCP servers) and network access for the sandbox, as -c overrides. Secrets travel as
       // whitelisted env vars (env_vars), never in argv.
-      const cfg = [...(o.network ? ['-c', 'sandbox_workspace_write.network_access=true'] : []),
+      // Persona and rules as developer instructions: they outrank the user turn, so the character holds its voice.
+      const cfg = [...(o.system ? ['-c', `developer_instructions=${JSON.stringify(o.system)}`, ...(o.persona ? ['-c', 'personality="none"'] : [])] : []), ...(o.network ? ['-c', 'sandbox_workspace_write.network_access=true'] : []),
         ...Object.entries(o.mcp ?? {}).flatMap(([n, m]) => ['-c', `mcp_servers.${n}.command=${JSON.stringify(m.command)}`,
           '-c', `mcp_servers.${n}.args=${JSON.stringify(m.args ?? [])}`, ...(m.envVars?.length ? ['-c', `mcp_servers.${n}.env_vars=${JSON.stringify(m.envVars)}`] : []),
           // codex exec can't ask for approval, so tools we hand it are pre-approved (or they'd always be refused).

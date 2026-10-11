@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isDue } from './schedules.mjs';
-import { PARSERS, isCodexWriterConflict } from './engines.mjs';
+import { PARSERS, isCodexMissingPowerTool, isCodexWriterConflict, sessionForTurn } from './engines.mjs';
 
 const DIR = dirname(fileURLToPath(import.meta.url));
 const home = mkdtempSync(join(tmpdir(), 'power-e2e-'));
@@ -116,6 +116,18 @@ test('codex: only active-writer conflicts trigger a fresh-session retry', () => 
   assert.equal(isCodexWriterConflict('thread-store conflict: thread T already has an active writer'), true);
   assert.equal(isCodexWriterConflict('network request failed'), false);
   assert.equal(isCodexWriterConflict(null), false);
+});
+
+test('codex: missing Power MCP tools trigger a fresh-session retry', () => {
+  assert.equal(isCodexMissingPowerTool('tools.mcp__memory__confirm_send is not a function'), true);
+  assert.equal(isCodexMissingPowerTool('当前工具列表里没有 mcp__memory__confirm_send'), true);
+  assert.equal(isCodexMissingPowerTool('审批卡已生成'), false);
+  assert.equal(isCodexMissingPowerTool(null), false);
+});
+
+test('codex: every Power turn starts fresh so dynamic MCP tools stay available', () => {
+  assert.equal(sessionForTurn('codex', 'stale-codex-session'), null);
+  assert.equal(sessionForTurn('claude', 'saved-claude-session'), 'saved-claude-session');
 });
 
 test('parsers: hermes live steps, boxed answer and resumable session', () => {

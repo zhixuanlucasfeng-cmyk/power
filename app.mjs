@@ -8,7 +8,7 @@ import { homedir } from 'node:os';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { openMemory, memoryDir } from './memory.mjs';
-import { ADAPTERS, detect, engineChoices, findBin, isCodexWriterConflict, strip } from './engines.mjs';
+import { ADAPTERS, detect, engineChoices, findBin, isCodexMissingPowerTool, isCodexWriterConflict, sessionForTurn, strip } from './engines.mjs';
 import { createScheduler } from './schedules.mjs';
 import { createTelegram } from './telegram.mjs';
 
@@ -185,7 +185,8 @@ const readBody = (req) => new Promise((ok) => { let s = ''; req.on('data', (c) =
 
 const display = (c) => (c.name === c.zh ? c.name : `${c.name} (${c.zh})`);
 // Agents without a system-prompt flag get the character's voice inline.
-const voiced = (c, text) => (c.prompt ? `[Your name here is ${display(c)}; introduce yourself by that name. Voice for your replies: ${c.prompt}${userName() ? ` The user's name is ${userName()}; address them that way.` : ''} Stay fully in character and do not volunteer that you are an AI; but if the user sincerely asks whether they are talking to a real person, do not claim to be human. The persona is a voice only: the rules in CLAUDE.md always win, and never actually manipulate, threaten or put down the user. Reply in the user's language.]\n\n${text}` : text);
+const voiceText = (c) => `Your name here is ${display(c)}; introduce yourself by that name. Voice for your replies: ${c.prompt} Tone, wording and catchphrases matter as much as the content: answer the way this character would actually talk, never in a neutral assistant voice.${userName() ? ` The user's name is ${userName()}; address them that way.` : ''} Stay fully in character and do not volunteer that you are an AI; but if the user sincerely asks whether they are talking to a real person, do not claim to be human. The persona is a voice only: the rules in CLAUDE.md always win, and never actually manipulate, threaten or put down the user. Reply in the user's language.`;
+const voiced = (c, text) => (c.prompt ? `[${voiceText(c)}]\n\n${text}` : text);
 
 // Engines without sessions get the recent conversation inline.
 function withHistory(t, text) {
@@ -228,9 +229,10 @@ function runTurn(t, c, { prompt, session, model, effort, ask, files }, emit, hol
   const toolNote = codexTools ? '\n\nTools you have here: the memory MCP (memory_search / memory_save / skill_save) — search it when past context could matter, save lasting facts the user tells you.' +
     (CUA ? CUA_NOTE : '') + (contractOf() ? CONTRACT_NOTE : '') + confirmNote() + powerRules() : '';
   const cmd = ADAPTERS[c.engine].run({
-    prompt: isClaude ? prompt : voiced(c, prompt + toolNote), network: !!codexTools, mcp: codexTools?.mcp, files, dir, session, model: realModel, effort: realModel ? effort : undefined, template: c.template,
+    prompt: isClaude || c.engine === 'codex' ? prompt : voiced(c, prompt + toolNote), network: !!codexTools, mcp: codexTools?.mcp, persona: !!c.prompt, files, dir, session, model: realModel, effort: realModel ? effort : undefined, template: c.template,
     cwd: isClaude ? HOME : dir,
-    system: isClaude ? `Your name here is ${display(c)}; introduce yourself by that name (Power is just the app). ` + (c.prompt ?? '') + style() + (vaultOf() ? vaultNote(vaultOf()) : '') + (CUA ? CUA_NOTE : '') + (contractOf() ? CONTRACT_NOTE : '') + `\n\nThe user's working folder is ${dir}. "This folder", "the project" and relative paths mean that folder; use absolute paths under it.` : null,
+    system: c.engine === 'codex' ? (c.prompt ? `${voiceText(c)} Keep this voice in every reply, including when you report tool results or code.` : '') + toolNote
+      : isClaude ? `Your name here is ${display(c)}; introduce yourself by that name (Power is just the app). ` + (c.prompt ?? '') + style() + (vaultOf() ? vaultNote(vaultOf()) : '') + (CUA ? CUA_NOTE : '') + (contractOf() ? CONTRACT_NOTE : '') + `\n\nThe user's working folder is ${dir}. "This folder", "the project" and relative paths mean that folder; use absolute paths under it.` : null,
     extra: isClaude ? ['--plugin-dir', DIR, ...(CLAUDE_MEM ? ['--plugin-dir', CLAUDE_MEM] : []), '--setting-sources', 'project,local', '--permission-mode', 'auto', '--add-dir', dir, '--add-dir', UPLOADS,
       ...(existsSync(MAIN_MEMORY) ? ['--add-dir', MAIN_MEMORY] : []), ...(vaultOf() ? ['--add-dir', vaultOf()] : []), ...((m) => (m ? ['--mcp-config', m] : []))(mcpConfig()), '--chrome'] : [],
   });
@@ -270,8 +272,9 @@ function runTurn(t, c, { prompt, session, model, effort, ask, files }, emit, hol
       if (!cmd.parse && strip(plain).trim()) { out({ t: 'text_start' }); out({ t: 'text', d: strip(plain).trim() }); }
       const error = st.error ?? (code ? (strip(stderr).trim().slice(-500) || `已停止 (${code})`) : null);
       const writerConflict = c.engine === 'codex' && !!session && isCodexWriterConflict(error);
-      if (!done && !writerConflict) out({ t: 'done', ms: Date.now() - started, error });
-      resolve({ session: st.session ?? null, error, writerConflict });
+      const missingPowerTool = c.engine === 'codex' && isCodexMissingPowerTool(st.text);
+      if (!done && !writerConflict && !missingPowerTool) out({ t: 'done', ms: Date.now() - started, error });
+      resolve({ session: st.session ?? null, error, writerConflict, missingPowerTool });
     });
   });
 }
@@ -396,18 +399,23 @@ async function runChat(prep, sink = () => {}) {
   try {
     if (!group) {
       const a = ADAPTERS[c.engine];
-      const session = a.session ? t.sessions[char] : null;
+      const session = a.session ? sessionForTurn(c.engine, t.sessions[char]) : null;
       const prompt = (a.session && session ? text : withHistory(t, text)) + filesNote(files);
+      const attemptStart = t.events.length;
       let result = await runTurn(t, c, { prompt, session, model, effort, ask: text, files }, emit, hold);
-      if (result.writerConflict) {
+      if (result.writerConflict || (session && result.missingPowerTool)) {
         // Another Codex process owns this saved session. Keep Power's transcript, discard only the
         // unusable engine session id, and retry once with recent context in a fresh Codex thread.
+        // A resumed Codex thread can also retain a stale MCP tool snapshot; fresh restores Power tools.
+        if (result.missingPowerTool) t.events.splice(attemptStart);
         delete t.sessions[char];
         emit({ t: 'wait', s: 0, who: `${display(c)} · 正在恢复会话` });
         const retryPrompt = withHistory(t, text) + filesNote(files);
         result = await runTurn(t, c, { prompt: retryPrompt, session: null, model, effort, ask: text, files }, emit, hold);
+        if (result.missingPowerTool) emit({ t: 'done', error: 'Power 工具仍未加载，请重新发送这条消息' });
       }
-      if (result.session && a.session) t.sessions[char] = result.session;
+      if (result.session && a.session && c.engine !== 'codex') t.sessions[char] = result.session;
+      else if (c.engine === 'codex') delete t.sessions[char];
     } else {
       const say = async (m, extra, final) => {
         const mc = chars[m];
