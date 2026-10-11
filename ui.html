@@ -93,6 +93,9 @@
   .stack.big .badge.sm { width:30px; height:30px; font-size:14px; border-radius:9px; margin-right:-10px; }
   .stack.big { margin-right:14px; }
   .th.grp { display:flex; align-items:center; }
+  .gtag { display:inline-block; font-size:10.5px; line-height:1.5; padding:0 6px; border-radius:6px; border:1px solid color-mix(in srgb, var(--k, var(--c)) 45%, transparent); color:color-mix(in srgb, var(--k, var(--c)) 80%, var(--text)); margin-right:3px; }
+  .ch.grp { --k:var(--pink); } .ch.grp .stack { margin-right:4px; flex:none; } .ch .who2 small { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; display:block; }
+  .ch.grp .who2 b { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .ren { width:100%; font:inherit; color:var(--text); background:#06070f; border:1px solid var(--c); border-radius:6px; padding:2px 6px; outline:0; }
   .model.final { border-color:var(--k); color:var(--k); margin-left:4px; }
   .card.pickg { position:relative; opacity:.55; } .card.pickg.on { opacity:1; }
@@ -373,21 +376,24 @@ const base = (d) => (short(d) === '~' ? '主目录 ~' : d.split('/').filter(Bool
 let renaming = false;
 function renderTree() {
   if (!META || renaming) return;
-  const groups = {};
+  // One WeChat-style list: people and group chats together, most recent conversation on top; the group
+  // (公安 / 校园 / …) is a tag under each name instead of a section you have to scroll to.
   const last = {};
   for (const t of THREADS) if (t.char && !(last[t.char] > t.updated)) last[t.char] = t.updated;
-  for (const [k, x] of visible()) (groups[x.group] ??= []).push([k, x]);
-  for (const list of Object.values(groups)) list.sort(([a], [b]) => (last[b] ?? '').localeCompare(last[a] ?? '')); // stable: untouched keep default order
-  const groupThreads = THREADS.filter((t) => t.members?.length > 1);
-  const chats = `<div class="sec">群聊 <button class="mini" data-act="newgroup" title="新群聊">＋</button></div>` +
-    (groupThreads.map((t) => `<div class="th grp ${t.id === cur ? 'on' : ''}" data-act="thread" data-id="${t.id}"><span class="stack">${t.members.slice(0, 4).map((m) => badge(m, true)).join('')}</span>${t.running ? '<span class="dot"></span>' : ''}${esc(t.title)}</div>`).join('') ||
-     '<div class="meta" style="padding:0 10px 6px">拉几个 Agent 一起解决问题</div>');
-  const heading = (g) => `<div class="sec">${esc(g)}${g === '本机' ? ' <button class="mini" data-act="rescan" title="重新扫描本机 Agent">🔍 扫描</button>' : ''}</div>`;
-  if (!groups['本机']) groups['本机'] = [];
-  $('#tree').innerHTML = chats + Object.entries(groups).map(([g, list]) => heading(g) + (list.length ? '' : '<div class="meta" style="padding:0 10px 6px">没发现别的 Agent</div>') + list.map(([k, x]) => {
-    const isOpen = open_.has(k);
-    const head = `<div class="ch ${k === char ? 'on' : ''}" data-act="char" data-c="${k}" style="--k:${look(k).k}">${badge(k, true)}<div class="who2"><b>${esc(nm(k))}</b><small>${esc(x.role)} · ${esc(modelLabel(k))}</small></div><span class="car">${isOpen ? '▾' : '▸'}</span></div>`;
-    if (!isOpen) return head;
+  const items = [
+    ...THREADS.filter((t) => t.members?.length > 1).map((t) => ({ kind: 'group', t, at: t.updated })),
+    ...visible().map(([k, x]) => ({ kind: 'char', k, x, at: last[k] ?? '' })),
+  ].sort((a, b) => b.at.localeCompare(a.at)); // stable: never-used characters keep the pack's order
+  const head = `<div class="sec">聊天 <span><button class="mini" data-act="newgroup" title="新群聊">＋ 群聊</button> <button class="mini" data-act="rescan" title="重新扫描本机 Agent">🔍</button></span></div>`;
+  $('#tree').innerHTML = head + items.map((it) => {
+    if (it.kind === 'group') {
+      const t = it.t;
+      return `<div class="ch grp ${t.id === cur ? 'on' : ''}" data-act="thread" data-id="${t.id}"><span class="stack">${t.members.slice(0, 3).map((m) => badge(m, true)).join('')}</span>` +
+        `<div class="who2"><b>${t.running ? '<span class="dot"></span>' : ''}${esc(t.title)}</b><small><span class="gtag">群聊</span> ${t.members.length} 人 · ${esc(t.members.map(nm).join('、'))}</small></div></div>`;
+    }
+    const { k, x } = it, isOpen = open_.has(k);
+    const row = `<div class="ch ${k === char ? 'on' : ''}" data-act="char" data-c="${k}" style="--k:${look(k).k}">${badge(k, true)}<div class="who2"><b>${esc(nm(k))}</b><small><span class="gtag">${esc(x.group)}</span> ${esc(x.role)} · ${esc(modelLabel(k))}</small></div><span class="car">${isOpen ? '▾' : '▸'}</span></div>`;
+    if (!isOpen) return row;
     const projs = (PROJECTS[k] || []).map((d) => {
       const ts = THREADS.filter((t) => t.char === k && t.dir === d);
       const here = k === char && d === dir;
@@ -395,8 +401,8 @@ function renderTree() {
         `<span class="acts"><i data-act="newin" title="新对话">＋</i>${short(d) === '~' ? '' : '<i data-act="rmproj" title="从列表移除（不删文件）">×</i>'}</span></div>` +
         ts.map((t) => `<div class="th ${t.id === cur ? 'on' : ''}" data-act="thread" data-id="${t.id}">${t.running ? '<span class="dot"></span>' : ''}${esc(t.title)}</div>`).join('');
     }).join('');
-    return head + `<div class="kids" style="--k:${look(k).k}">${projs}<div class="proj add" data-act="addproj" data-k="${k}">＋ 添加项目文件夹</div></div>`;
-  }).join('')).join('');
+    return row + `<div class="kids" style="--k:${look(k).k}">${projs}<div class="proj add" data-act="addproj" data-k="${k}">＋ 添加项目文件夹</div></div>`;
+  }).join('');
 }
 
 function pickFolder(cb) {
@@ -568,7 +574,7 @@ function startGroup(members, rounds) {
   $('#input').focus();
 }
 function renameThread(id) {
-  const row = document.querySelector(`#tree .th[data-id="${id}"]`), t = THREADS.find((x) => x.id === id);
+  const row = document.querySelector(`#tree [data-act="thread"][data-id="${id}"]`), t = THREADS.find((x) => x.id === id);
   if (!row || !t || renaming) return;
   renaming = true;
   row.innerHTML = `<input class="ren" maxlength="60">`;
