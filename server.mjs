@@ -20,6 +20,17 @@ const instructions = `Long-term memory and self-written skills.
 const server = new McpServer({ name: 'power-memory', version: '0.1.0' }, { instructions });
 const text = (v) => ({ content: [{ type: 'text', text: typeof v === 'string' ? v : JSON.stringify(v, null, 2) }] });
 
+// Send confirmation card: blocks until the user taps 发送 / 取消 in the Power app (or 10 minutes pass).
+server.registerTool('confirm_send', {
+  description: 'Ask the user to approve a message/post before you send it on their behalf. Returns APPROVED or DENIED. Call it with the exact final text; send only if APPROVED.',
+  inputSchema: { platform: z.string().describe('e.g. WeChat, Reddit, email'), recipient: z.string().describe('person, group or place it goes to'), text: z.string().describe('exact text to send') },
+}, async ({ platform, recipient, text: body }) => {
+  try {
+    const r = await fetch(`http://127.0.0.1:${process.env.POWER_PORT || 4545}/api/approvals`, { method: 'POST', body: JSON.stringify({ thread: process.env.POWER_THREAD, platform, recipient, text: body }) });
+    return text((await r.json()).approved ? 'APPROVED' : 'DENIED');
+  } catch (e) { return { isError: true, ...text(`Power app not reachable (${e.message}); do not send.`) }; }
+});
+
 server.registerTool('memory_save', {
   description: 'Save one durable fact or user preference to long-term memory. Returns its id.',
   inputSchema: { content: z.string().min(1), tags: z.string().optional().describe('space-separated tags') },

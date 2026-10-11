@@ -1,6 +1,5 @@
 // Power.app: a native window around the local Power server (app.mjs).
-// Starts the server through a login shell so claude/hermes/opencode/codex are on PATH,
-// and stops it on quit if this app started it.
+// The server runs as a launchd agent (`power service ensure`), so closing this window never interrupts a chat.
 import Cocoa
 import WebKit
 
@@ -11,7 +10,6 @@ let projectDir = Bundle.main.object(forInfoDictionaryKey: "PowerDir") as? String
 final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKUIDelegate, WKNavigationDelegate {
     var window: NSWindow!
     var web: WKWebView!
-    var server: Process?
 
     func applicationDidFinishLaunching(_ note: Notification) {
         buildMenu()
@@ -42,7 +40,6 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKUIDe
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ app: NSApplication) -> Bool { true }
-    func applicationWillTerminate(_ note: Notification) { server?.terminate() }
 
     func serverUp() -> Bool {
         var ok = false
@@ -60,13 +57,12 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKUIDe
         if serverUp() { return }
         let p = Process()
         p.executableURL = URL(fileURLWithPath: "/bin/zsh")
-        // -l -i: load the user's PATH the same way Ghostty does.
-        p.arguments = ["-lic", "cd \"\(projectDir)\" && exec node app.mjs >> \"$HOME/.power/app.log\" 2>&1"]
+        // -l -i: load the user's PATH the same way Ghostty does; launchd then owns the server.
+        p.arguments = ["-lic", "\"\(projectDir)/power\" service ensure >> \"$HOME/.power/app.log\" 2>&1"]
         p.standardInput = FileHandle.nullDevice
         p.standardOutput = FileHandle.nullDevice
         p.standardError = FileHandle.nullDevice
         try? p.run()
-        server = p
     }
 
     func waitThenLoad(tries: Int) {

@@ -4,14 +4,55 @@
 #   power            interactive session
 #   power -c         continue the last session
 #   power app        open the Power Mac app (builds it on first run)
+#   power service    keep the Power server running in the background (launchd):
+#                    ensure | restart (waits until no chat is running) | stop | uninstall | log
 set -e
 DIR=$(cd "$(dirname "$(readlink -f "$0")")" && pwd)
 export POWER_HOME="${POWER_HOME:-$HOME/.power}"
+PORT="${POWER_PORT:-4545}"
+LABEL=local.power.server
+PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
 
 mkdir -p "$POWER_HOME/.claude/skills"
 # First run only: never overwrite the user's edits.
 [ -f "$POWER_HOME/CLAUDE.md" ] || cp "$DIR/persona.md" "$POWER_HOME/CLAUDE.md"
 [ -d "$DIR/node_modules" ] || (cd "$DIR" && npm install --silent)
+
+up() { curl -s -m 2 -o /dev/null "http://127.0.0.1:$PORT/api/meta"; }
+
+if [ "$1" = service ]; then
+  case "${2:-ensure}" in
+    ensure)
+      # The server outlives the app window: launchd keeps it alive and restarts it if it ever exits.
+      if [ ! -f "$PLIST" ]; then
+        mkdir -p "$(dirname "$PLIST")"
+        cat > "$PLIST" <<PL
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>$LABEL</string>
+  <key>ProgramArguments</key><array><string>/bin/zsh</string><string>-lic</string><string>cd "$DIR" &amp;&amp; exec node app.mjs</string></array>
+  <key>EnvironmentVariables</key><dict><key>POWER_HOME</key><string>$POWER_HOME</string><key>POWER_PORT</key><string>$PORT</string></dict>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>StandardOutPath</key><string>$POWER_HOME/app.log</string>
+  <key>StandardErrorPath</key><string>$POWER_HOME/app.log</string>
+</dict></plist>
+PL
+      fi
+      launchctl print "gui/$(id -u)/$LABEL" >/dev/null 2>&1 || launchctl bootstrap "gui/$(id -u)" "$PLIST"
+      for _ in 1 2 3 4 5 6 7 8 9 10; do up && exit 0; sleep 0.5; done
+      echo "server not up yet; see $POWER_HOME/app.log" >&2; exit 1 ;;
+    restart)
+      # Graceful: the server exits once no chat is running, launchd starts the new code.
+      curl -s -m 5 -X POST "http://127.0.0.1:$PORT/api/restart" >/dev/null || launchctl kickstart -k "gui/$(id -u)/$LABEL" ;;
+    stop) launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null || true ;;
+    uninstall) launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null || true; rm -f "$PLIST" ;;
+    log) tail -f "$POWER_HOME/app.log" ;;
+    *) echo "usage: power service [ensure|restart|stop|uninstall|log]" >&2; exit 1 ;;
+  esac
+  exit 0
+fi
 
 if [ "$1" = app ]; then
   [ -d "$HOME/Applications/Power.app" ] || "$DIR/mac/build.sh"

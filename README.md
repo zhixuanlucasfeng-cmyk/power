@@ -15,6 +15,12 @@
 - **Memory you can see.** Facts are saved as Markdown notes in your Obsidian vault (one note per fact) and recalled automatically on every message. Edit or delete them in Obsidian; the crew follows.
 - **Tools behind one key.** Optionally connect [Contract](https://github.com/zhixuanlucasfeng-cmyk/contract), a one-key tool gateway for search, scraping, social, crypto, finance and company data, with automatic failover.
 - **Desktop apps (optional).** With [Cua Driver](https://github.com/trycua/cua) installed, Claude characters can operate Mac apps in the background.
+- **@ and auto-routing in groups.** `@Name` gets only that member; otherwise a router picks the best lead (plus at most two helpers) from the team rules, so not everyone repeats each other. "Everyone takes a turn" mode is still there.
+- **Attachments.** Paste, drop or 📎 images and files; Claude reads them by path, Codex gets images (`-i`), opencode gets files (`-f`).
+- **Scheduled tasks.** "Every day at 08:00, have Nayuta summarize my unread WeChat"; you get a notification with the result.
+- **Phone (Telegram).** Pair a bot you create with @BotFather; message the crew from your phone, and tap Send/Cancel on confirmation cards there.
+- **Send confirmation cards.** Before an agent sends a message or post for you it calls `confirm_send`; a card pops up in the app (and on your phone) and nothing goes out until you tap Send.
+- **Keeps running.** The server is a launchd agent (`power service ensure`), so closing the window never cuts off a chat; it notifies you when long replies finish. Interface in 中文 or English.
 
 | | |
 |---|---|
@@ -36,6 +42,7 @@ Power drives each agent through its own official CLI, the same way you would in 
 git clone https://github.com/zhixuanlucasfeng-cmyk/power && cd power
 npm install
 ln -sf "$PWD/power" ~/.local/bin/power   # puts the `power` command on your PATH
+power service ensure                     # keep the server running in the background (launchd)
 power app                                # builds ~/Applications/Power.app on first run and opens it
 ```
 
@@ -104,7 +111,7 @@ Adding an agent means adding one entry to `ADAPTERS` in `engines.mjs`: the binar
 ## Develop
 
 ```sh
-npm test            # memory store and recall
+npm test            # memory, parsers, and end-to-end chats with fake agents (single, group, @, time limit, files, confirmations)
 node app.mjs        # http://127.0.0.1:4545
 mac/build.sh        # rebuild Power.app after changing mac/PowerApp.swift
 ```

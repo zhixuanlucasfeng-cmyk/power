@@ -9,14 +9,18 @@ import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { openMemory, memoryDir } from './memory.mjs';
 import { ADAPTERS, detect, engineChoices, findBin, strip } from './engines.mjs';
+import { createScheduler } from './schedules.mjs';
+import { createTelegram } from './telegram.mjs';
 
 const DIR = dirname(fileURLToPath(import.meta.url));
 const HOME = process.env.POWER_HOME || join(homedir(), '.power');
 const SKILLS = join(HOME, '.claude', 'skills');
 const THREADS = join(HOME, 'threads');
+const UPLOADS = join(HOME, 'uploads');
 const AVATARS = join(HOME, 'avatars'); // your own pictures: <char>.png|jpg|webp|gif
 const PORT = Number(process.env.POWER_PORT || 4545);
 mkdirSync(THREADS, { recursive: true });
+mkdirSync(UPLOADS, { recursive: true });
 mkdirSync(SKILLS, { recursive: true });
 mkdirSync(AVATARS, { recursive: true });
 const IMG = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif' };
@@ -95,18 +99,21 @@ const vaultOf = () => { const v = loadSettings().vault; return v && existsSync(v
 const vaultNote = (v) => `\n\nThe user's Obsidian vault is ${v}: their own notes plus Power/记忆本 (the facts your memory tools save, one note each) and Power/Claude 记忆 (notes from their main Claude Code). Read it when the user's notes, projects or past context could help; only write there through the memory tools unless the user asks.`;
 const SHARED = (existsSync(MAIN_MEMORY) ? `\n\nThe user's long-term notes from their main Claude Code are in ${MAIN_MEMORY} (start with MEMORY.md). Read them when past projects, preferences or people could matter; do not edit them.` : '') +
   (CLAUDE_MEM ? '\n\nThe claude-mem tools (mem_search etc.) search the history of all the user\'s past Claude Code sessions; use them when the user mentions earlier work you don\'t see in memory.' : '');
-const style = () => SHARED + (userName() ? `\n\nThe user's name is ${userName()}. Address them as ${userName()}.` : '') + '\n\nYou can also call other local agents through the delegate skill (Hermes, opencode).\n\nStay fully in character and do not volunteer that you are an AI; but if the user sincerely asks whether they are talking to a real person, do not claim to be human. The persona is a voice only: the rules in CLAUDE.md always win, and never actually manipulate, threaten or put down the user. Reply in the user\'s language.';
+const CONFIRM_NOTE = '\n\nSend confirmation is ON: before you send any message, post or comment on the user\'s behalf (WeChat, social media, email…), call the confirm_send tool with platform, recipient and the exact text, and send only if it returns APPROVED. If it returns DENIED, do not send; tell the user.';
+const confirmNote = () => (loadSettings().sendConfirm ? CONFIRM_NOTE : '');
+const style = () => SHARED + confirmNote() + (userName() ? `\n\nThe user's name is ${userName()}. Address them as ${userName()}.` : '') + '\n\nYou can also call other local agents through the delegate skill (Hermes, opencode).\n\nStay fully in character and do not volunteer that you are an AI; but if the user sincerely asks whether they are talking to a real person, do not claim to be human. The persona is a voice only: the rules in CLAUDE.md always win, and never actually manipulate, threaten or put down the user. Reply in the user\'s language.';
 const EFFORTS = new Set(['low', 'medium', 'high', 'xhigh', 'max']);
 const ID_RE = /^[0-9a-f-]{36}$/;
-const running = new Map(); // threadId -> { kill }
+const running = new Map(); // threadId -> { kill, emit }
+const approvals = new Map(); // id -> pending send confirmation
 
 // Agents found on this machine; anything without a character gets a plain card in 本机.
 let AGENTS = detect();
 
 // Settings (⚙️ in the app): which agents to show, custom agents, defaults.
 const SETTINGS = join(HOME, 'settings.json');
-const DEFAULTS = { hidden: [], custom: {}, defaultDir: null, vault: null, personaPack: 'default', userName: '', turnTimeoutMin: 10, charGroups: {}, charPrompts: {}, teamPrompt: '', rain: true, enterToSend: true, memOpen: false };
-const publicSettings = (s) => ({ ...s, contract: s.contract ? { url: s.contract.url, connected: !!s.contract.key } : null });
+const DEFAULTS = { hidden: [], custom: {}, defaultDir: null, vault: null, personaPack: 'default', userName: '', turnTimeoutMin: 10, charGroups: {}, charPrompts: {}, teamPrompt: '', notify: true, sendConfirm: true, language: 'zh', rain: true, enterToSend: true, memOpen: false };
+const publicSettings = (s) => ({ ...s, contract: s.contract ? { url: s.contract.url, connected: !!s.contract.key } : null, telegram: undefined });
 const loadSettings = () => { try { return { ...DEFAULTS, ...JSON.parse(readFileSync(SETTINGS, 'utf8')) }; } catch { return { ...DEFAULTS }; } };
 const saveSettings = (s) => writeFileSync(SETTINGS, JSON.stringify(s, null, 1));
 
@@ -203,7 +210,7 @@ function transcript(t) {
 }
 
 // Run one turn of one agent. Streams UI events through emit; resolves with the new session id (if any).
-function runTurn(t, c, { prompt, session, model, effort, ask }, emit, hold) {
+function runTurn(t, c, { prompt, session, model, effort, ask, files }, emit, hold) {
   const isClaude = c.engine === 'claude';
   // Automatic recall: relevant notes from the shared 记忆本 ride along with every turn.
   const notes = ask ? mem.recall(ask, 5) : [];
@@ -213,18 +220,18 @@ function runTurn(t, c, { prompt, session, model, effort, ask }, emit, hold) {
   const realModel = isClaude ? model : c.engine === 'ollama' ? c.model : engineChoices()[c.engine]?.some((m) => m.id === model) ? model : undefined;
   // Codex gets the same tools as the Claude crew: memory, Contract and desktop control, plus network.
   const codexTools = c.engine === 'codex' ? (() => {
-    const k = contractOf(), mcp = { memory: { command: process.execPath, args: [join(DIR, 'server.mjs')], envVars: ['POWER_HOME'] } };
+    const k = contractOf(), mcp = { memory: { command: process.execPath, args: [join(DIR, 'server.mjs')], envVars: ['POWER_HOME', 'POWER_PORT', 'POWER_THREAD'] } };
     if (k) mcp.contract = { command: process.execPath, args: [k.mcp], envVars: ['CONTRACT_KEY', 'CONTRACT_URL'] };
     if (CUA) mcp.cua = { command: CUA, args: ['mcp'] };
     return { mcp, env: k ? { CONTRACT_KEY: k.key, CONTRACT_URL: k.url } : {} };
   })() : null;
   const toolNote = codexTools ? '\n\nTools you have here: the memory MCP (memory_search / memory_save / skill_save) — search it when past context could matter, save lasting facts the user tells you.' +
-    (CUA ? CUA_NOTE : '') + (contractOf() ? CONTRACT_NOTE : '') + powerRules() : '';
+    (CUA ? CUA_NOTE : '') + (contractOf() ? CONTRACT_NOTE : '') + confirmNote() + powerRules() : '';
   const cmd = ADAPTERS[c.engine].run({
-    prompt: isClaude ? prompt : voiced(c, prompt + toolNote), network: !!codexTools, mcp: codexTools?.mcp, dir, session, model: realModel, effort: realModel ? effort : undefined, template: c.template,
+    prompt: isClaude ? prompt : voiced(c, prompt + toolNote), network: !!codexTools, mcp: codexTools?.mcp, files, dir, session, model: realModel, effort: realModel ? effort : undefined, template: c.template,
     cwd: isClaude ? HOME : dir,
     system: isClaude ? `Your name here is ${display(c)}; introduce yourself by that name (Power is just the app). ` + (c.prompt ?? '') + style() + (vaultOf() ? vaultNote(vaultOf()) : '') + (CUA ? CUA_NOTE : '') + (contractOf() ? CONTRACT_NOTE : '') + `\n\nThe user's working folder is ${dir}. "This folder", "the project" and relative paths mean that folder; use absolute paths under it.` : null,
-    extra: isClaude ? ['--plugin-dir', DIR, ...(CLAUDE_MEM ? ['--plugin-dir', CLAUDE_MEM] : []), '--setting-sources', 'project,local', '--permission-mode', 'auto', '--add-dir', dir,
+    extra: isClaude ? ['--plugin-dir', DIR, ...(CLAUDE_MEM ? ['--plugin-dir', CLAUDE_MEM] : []), '--setting-sources', 'project,local', '--permission-mode', 'auto', '--add-dir', dir, '--add-dir', UPLOADS,
       ...(existsSync(MAIN_MEMORY) ? ['--add-dir', MAIN_MEMORY] : []), ...(vaultOf() ? ['--add-dir', vaultOf()] : []), ...((m) => (m ? ['--mcp-config', m] : []))(mcpConfig()), '--chrome'] : [],
   });
   const bin = binOf(c);
@@ -233,7 +240,7 @@ function runTurn(t, c, { prompt, session, model, effort, ask }, emit, hold) {
     const st = {}, started = Date.now();
     let buf = '', stderr = '', plain = '', done = false;
     const out = (e) => { if (e.t === 'done') done = true; emit(e); };
-    const child = spawn(bin, cmd.args, { cwd: cmd.cwd ?? dir, env: { ...process.env, POWER_HOME: HOME, ...(codexTools?.env ?? {}) }, stdio: ['ignore', 'pipe', 'pipe'] });
+    const child = spawn(bin, cmd.args, { cwd: cmd.cwd ?? dir, env: { ...process.env, POWER_HOME: HOME, POWER_PORT: String(PORT), POWER_THREAD: t.id, ...(codexTools?.env ?? {}) }, stdio: ['ignore', 'pipe', 'pipe'] });
     hold(child);
     // Agents like Hermes print nothing until they finish: send a heartbeat so the UI shows who is working and for how
     // long, and stop a turn that runs past the limit so a group chat never waits forever.
@@ -252,7 +259,7 @@ function runTurn(t, c, { prompt, session, model, effort, ask }, emit, hold) {
       while ((i = buf.indexOf('\n')) >= 0) {
         const line = buf.slice(0, i); buf = buf.slice(i + 1);
         if (!cmd.parse) { plain += line + '\n'; continue; }
-        try { cmd.parse(JSON.parse(line), out, st); } catch {}
+        try { cmd.parse(cmd.lines ? line : JSON.parse(line), out, st); } catch {}
       }
     });
     child.stderr.on('data', (chunk) => (stderr += chunk));
@@ -274,22 +281,23 @@ const groupNote = (chars, members, me) =>
 // Group-chat division of labour: the pack's "team" text, or the user's own version from Settings.
 const teamRules = () => loadSettings().teamPrompt?.trim() || loadPack().team || '';
 
-async function send(req, res) {
-  const body = await readBody(req);
+class ChatError extends Error { constructor(status, message) { super(message); this.status = status; } }
+
+// Step 1: validate a message and set up its thread. Throws ChatError; does not run anything yet.
+function prepareChat(body) {
   const chars = allChars();
   const { thread, text } = body;
-  if (!text?.trim()) return json(res, 400, { error: 'bad request' });
-  if (thread && !ID_RE.test(thread)) return json(res, 400, { error: 'bad thread' });
-  if (thread && running.has(thread)) return json(res, 409, { error: '这个对话还在跑' });
-
+  if (!text?.trim()) throw new ChatError(400, 'bad request');
+  if (thread && !ID_RE.test(thread)) throw new ChatError(400, 'bad thread');
+  if (thread && running.has(thread)) throw new ChatError(409, '这个对话还在跑');
   const t = thread ? loadThread(thread) : { id: randomUUID(), title: text.trim().slice(0, 40), events: [], sessions: {} };
   t.sessions ??= {};
-  if (!thread && Array.isArray(body.members)) t.members = body.members.filter((m) => chars[m]).slice(0, 8);
+  if (!thread && Array.isArray(body.members)) { t.members = body.members.filter((m) => chars[m]).slice(0, 8); t.mode = body.mode === 'all' ? 'all' : 'auto'; }
   if (t.members) t.members = t.members.filter((m) => chars[m]);
   const group = t.members?.length > 1;
   const char = group ? null : (t.char ??= body.char && chars[body.char] ? body.char : Object.keys(chars)[0]);
   const c = chars[char];
-  if (!group && !c) return json(res, 400, { error: '这个角色的 Agent 没装' });
+  if (!group && !c) throw new ChatError(400, '这个角色的 Agent 没装');
   // Claude: our model list. Engines with a model menu (Codex): the user's pick, validated. Others: their own default.
   const menu = c ? engineChoices()[c.engine] : null;
   const picked = menu?.find((m) => m.id === body.model);
@@ -298,16 +306,76 @@ async function send(req, res) {
   const m = menu?.find((x) => x.id === model);
   const effort = c?.engine === 'claude' ? body.effort || c.effort || 'medium'
     : m ? (m.efforts.includes(body.effort) ? body.effort : m.efforts.includes(c.effort) ? c.effort : undefined) : undefined;
-  if (c?.engine === 'claude' && (!MODELS[model] || !EFFORTS.has(effort))) return json(res, 400, { error: 'bad model' });
+  if (c?.engine === 'claude' && (!MODELS[model] || !EFFORTS.has(effort))) throw new ChatError(400, 'bad model');
   if (body.dir) t.dir = body.dir;
   t.dir ??= loadSettings().defaultDir || homedir();
-  if (!existsSync(t.dir)) return json(res, 400, { error: `文件夹不存在：${t.dir}` });
+  if (!existsSync(t.dir)) throw new ChatError(400, `文件夹不存在：${t.dir}`);
+  const files = (Array.isArray(body.files) ? body.files : []).filter((f) => typeof f === 'string' && f.startsWith(UPLOADS + '/') && existsSync(f)).slice(0, 10);
   if (!group) addProject(char, t.dir);
   t.updated = new Date().toISOString();
-  t.events.push({ t: 'user', d: text, char, model, effort, members: t.members });
+  t.events.push({ t: 'user', d: text, char, model, effort, members: t.members, files: files.length ? files : undefined });
   saveThread(t);
+  return { t, chars, group, char, c, model, effort, text, files, rounds: body.rounds, source: body.source };
+}
 
-  res.writeHead(200, { 'content-type': 'application/x-ndjson', 'cache-control': 'no-cache' });
+const filesNote = (files) => (files?.length ? `\n\nAttached files (read them with your file tools; images too):\n${files.map((f) => `- ${f}`).join('\n')}` : '');
+
+// @Makima / @玛奇玛 / @makima → member keys, in the order they were mentioned.
+function mentions(text, members, chars) {
+  const out = [];
+  for (const [, tag] of text.matchAll(/@([^\s@，。,.!?！？:：]+)/g)) {
+    const k = members.find((m) => [m, chars[m].name, chars[m].zh].some((n) => n && n.toLowerCase().startsWith(tag.toLowerCase())));
+    if (k && !out.includes(k)) out.push(k);
+  }
+  return out;
+}
+
+// Ask a small Claude model a one-off question (used to route group chats). Returns its text or ''.
+function askClaude(prompt) {
+  const bin = AGENTS.find((a) => a.engine === 'claude')?.path;
+  if (!bin) return Promise.resolve('');
+  return new Promise((ok) => {
+    const ch = spawn(bin, ['-p', prompt, '--model', 'claude-haiku-5-5', '--output-format', 'json', '--setting-sources', 'project,local'],
+      { cwd: HOME, env: process.env, stdio: ['ignore', 'pipe', 'ignore'] });
+    let out = '';
+    const kill = setTimeout(() => ch.kill('SIGTERM'), 60000);
+    ch.stdout.on('data', (d) => (out += d));
+    ch.on('close', () => { clearTimeout(kill); try { ok(JSON.parse(out).result ?? ''); } catch { ok(''); } });
+    ch.on('error', () => ok(''));
+  });
+}
+
+// Auto mode: pick who should answer (a lead and up to two helpers) from the team rules.
+async function route(text, members, chars) {
+  const roster = members.map((m) => `- ${m}: ${display(chars[m])}, ${chars[m].role ?? ''}`).join('\n');
+  const reply = await askClaude(`Pick who in this group chat should answer the user's message.\nMembers:\n${roster}\n\n` +
+    `Team rules:\n${teamRules() || '(none)'}\n\nMessage: ${text}\n\n` +
+    'Reply with JSON only, no prose: {"lead":"<key>","helpers":["<key>", ...]} — helpers 0–2, only if they add something the lead would miss. Simple questions: no helpers.');
+  try {
+    const j = JSON.parse(reply.match(/\{[\s\S]*\}/)?.[0] ?? '');
+    const lead = members.includes(j.lead) ? j.lead : members[0];
+    return [lead, ...(j.helpers ?? []).filter((h) => members.includes(h) && h !== lead).slice(0, 2)];
+  } catch { return [members[0]]; }
+}
+
+// The latest answer in a thread: what the last speaker said after the last user message.
+function lastReply(t) {
+  const i = t.events.findLastIndex((e) => e.t === 'user');
+  const tail = t.events.slice(i + 1);
+  const j = tail.findLastIndex((e) => e.t === 'speaker');
+  return tail.slice(j + 1).filter((e) => e.t === 'text').map((e) => e.d).join('').trim();
+}
+
+function notify(title, body) {
+  if (!loadSettings().notify) return;
+  const q = (x) => JSON.stringify(String(x).slice(0, 200));
+  spawn('osascript', ['-e', `display notification ${q(body)} with title ${q(title)}`], { stdio: 'ignore' }).on('error', () => {});
+}
+
+// Step 2: run it. sink gets every UI event (the HTTP stream, or nothing for background runs).
+async function runChat(prep, sink = () => {}) {
+  const { t, chars, group, char, c, model, effort, text, files } = prep;
+  const started = Date.now();
   const emit = (e) => {
     // Store merged text so a reload shows the same conversation.
     const last = t.events.at(-1);
@@ -315,48 +383,66 @@ async function send(req, res) {
     else if (e.t === 'text_start') { if (last?.t === 'text') t.events.push({ t: 'text', d: '' }); }
     else if (e.t === 'thinking') { if (last?.t === 'thinking') last.n = e.n; else t.events.push(e); }
     else if (e.t !== 'wait') t.events.push({ ...e }); // heartbeats are live-only
-    if (e.t === 'done') saveThread(t); // a reload mid-group-chat shows everyone who already answered
-    res.write(JSON.stringify(e) + '\n');
+    if (e.t === 'done' || e.t === 'approval') saveThread(t); // a reload shows everyone who already answered
+    try { sink(e); } catch {}
   };
   emit({ t: 'thread', id: t.id, title: t.title, dir: t.dir, members: t.members });
 
   let child = null, stopped = false;
-  running.set(t.id, { kill: () => { stopped = true; child?.kill('SIGINT'); } });
+  running.set(t.id, { kill: () => { stopped = true; child?.kill('SIGINT'); }, emit });
   const hold = (ch) => (child = ch);
   try {
     if (!group) {
       const a = ADAPTERS[c.engine];
       const session = a.session ? t.sessions[char] : null;
-      const prompt = a.session ? text : withHistory(t, text);
-      const s = await runTurn(t, c, { prompt, session, model, effort, ask: text }, emit, hold);
+      const prompt = (a.session ? text : withHistory(t, text)) + filesNote(files);
+      const s = await runTurn(t, c, { prompt, session, model, effort, ask: text, files }, emit, hold);
       if (s && a.session) t.sessions[char] = s;
     } else {
-      // Group chat: everyone takes a turn seeing what the others said, then the first member wraps up.
-      const rounds = Math.min(Math.max(Number(body.rounds) || 1, 1), 3);
-      for (let r = 0; r < rounds && !stopped; r++) {
-        for (const m of t.members) {
-          if (stopped) break;
-          const mc = chars[m];
-          emit({ t: 'speaker', who: m, model: mc.model });
-          const prompt = `${groupNote(chars, t.members, m)}\n\nConversation so far:\n${transcript(t).join('\n\n')}\n\nNow it's your turn, ${display(mc)}.`;
-          await runTurn(t, mc, { prompt, model: mc.model, effort: mc.effort ?? 'medium', ask: text }, emit, hold);
-        }
-      }
-      if (!stopped) {
-        const lead = t.members[0], lc = chars[lead];
-        emit({ t: 'speaker', who: lead, model: lc.model, final: true });
-        const prompt = `${groupNote(chars, t.members, lead)}\n\nConversation so far:\n${transcript(t).join('\n\n')}\n\n` +
-          `You lead this group. Write the final answer for the user, combining the best of everyone's points and settling disagreements. Start with the answer.`;
-        await runTurn(t, lc, { prompt, model: lc.model, effort: lc.effort ?? 'medium', ask: text }, emit, hold);
+      const say = async (m, extra, final) => {
+        const mc = chars[m];
+        emit({ t: 'speaker', who: m, model: mc.model, final });
+        const prompt = `${groupNote(chars, t.members, m)}\n\nConversation so far:\n${transcript(t).join('\n\n')}${filesNote(files)}\n\n${extra}`;
+        await runTurn(t, mc, { prompt, model: mc.model, effort: mc.effort ?? 'medium', ask: text, files }, emit, hold);
+      };
+      const tagged = mentions(text, t.members, chars);
+      if (tagged.length) {
+        // @someone: only the people named answer, in that order.
+        for (const m of tagged) if (!stopped) await say(m, `The user addressed you directly (@${chars[m].name}). Answer them.`);
+      } else if (t.mode === 'auto') {
+        // Auto: a lead answers, helpers only add what's missing — no round where everyone repeats each other.
+        emit({ t: 'thinking' });
+        const [lead, ...helpers] = await route(text, t.members, chars);
+        emit({ t: 'routed', lead, helpers });
+        if (!stopped) await say(lead, `You lead this one. Answer the user fully.`);
+        for (const h of helpers) if (!stopped) await say(h, `Add only what ${display(chars[lead])} missed or got wrong, briefly. If nothing, say so in one line.`);
+      } else {
+        // Everyone: each member takes a turn, then the first member wraps up.
+        const rounds = Math.min(Math.max(Number(prep.rounds) || 1, 1), 3);
+        for (let r = 0; r < rounds && !stopped; r++) for (const m of t.members) if (!stopped) await say(m, `Now it's your turn, ${display(chars[m])}.`);
+        if (!stopped) await say(t.members[0], `You lead this group. Write the final answer for the user, combining the best of everyone's points and settling disagreements. Start with the answer.`, true);
       }
     }
   } finally {
     running.delete(t.id);
     t.updated = new Date().toISOString();
     saveThread(t);
-    res.end();
   }
+  const reply = lastReply(t);
+  if (Date.now() - started > 15000 && prep.source !== 'telegram') notify(`Power · ${group ? t.title : display(c)}`, reply || '完成了');
+  return { t, reply };
 }
+
+async function send(req, res) {
+  let prep;
+  try { prep = prepareChat(await readBody(req)); } catch (e) { return json(res, e.status ?? 500, { error: e.message }); }
+  res.writeHead(200, { 'content-type': 'application/x-ndjson', 'cache-control': 'no-cache' });
+  await runChat(prep, (e) => { if (!res.writableEnded) res.write(JSON.stringify(e) + '\n'); });
+  res.end();
+}
+
+const scheduler = createScheduler({ home: HOME, prepareChat, runChat, running, notify, log: (m) => console.error(m) });
+const telegram = createTelegram({ loadSettings, saveSettings, prepareChat, runChat, allChars, approvals, log: (m) => console.error(m) });
 
 createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
@@ -390,7 +476,8 @@ createServer(async (req, res) => {
       const b = await readBody(req), st = loadSettings();
       if (Array.isArray(b.hidden)) st.hidden = b.hidden.filter((k) => typeof k === 'string');
       if ('defaultDir' in b) { if (b.defaultDir && !existsSync(b.defaultDir)) return json(res, 400, { error: `文件夹不存在：${b.defaultDir}` }); st.defaultDir = b.defaultDir || null; }
-      for (const k of ['rain', 'enterToSend', 'memOpen']) if (typeof b[k] === 'boolean') st[k] = b[k];
+      for (const k of ['rain', 'enterToSend', 'memOpen', 'notify', 'sendConfirm']) if (typeof b[k] === 'boolean') st[k] = b[k];
+      if (['zh', 'en'].includes(b.language)) st.language = b.language;
       if (Number(b.turnTimeoutMin) > 0) st.turnTimeoutMin = Math.min(Number(b.turnTimeoutMin), 120);
       if (typeof b.userName === 'string') st.userName = b.userName.trim().slice(0, 40);
       if (b.charPrompts && typeof b.charPrompts === 'object')
@@ -433,6 +520,59 @@ createServer(async (req, res) => {
         return json(res, 200, { connected: true, url: k.url, ...(await tools.json()), balance: bal.ok ? await bal.json() : null });
       } catch (e) { return json(res, 200, { connected: false, url: k.url, error: `网关连不上（${e.message}）。Docker 开着吗？` }); }
     }
+    if (p === '/api/upload' && req.method === 'POST') {
+      // Pasted / dropped files: stored under ~/.power/uploads, handed to agents by path.
+      const name = (() => { try { return decodeURIComponent(String(req.headers['x-filename'] ?? 'file')); } catch { return 'file'; } })().replace(/[^\w.\-\u4e00-\u9fff]+/g, '_').slice(-80) || 'file';
+      const chunks = []; let n = 0;
+      for await (const ch of req) { n += ch.length; if (n > 25e6) return json(res, 413, { error: '文件太大（最多 25MB）' }); chunks.push(ch); }
+      const file = join(UPLOADS, `${randomUUID().slice(0, 8)}-${name}`);
+      writeFileSync(file, Buffer.concat(chunks));
+      return json(res, 200, { path: file, name, url: `/upload/${encodeURIComponent(file.slice(UPLOADS.length + 1))}` });
+    }
+    if (p.startsWith('/upload/')) {
+      const f = join(UPLOADS, decodeURIComponent(p.slice(8)).replace(/[\/]/g, ''));
+      if (!existsSync(f)) return json(res, 404, {});
+      const ext = f.split('.').pop().toLowerCase();
+      res.writeHead(200, { 'content-type': IMG[ext] ?? 'application/octet-stream' });
+      return res.end(readFileSync(f));
+    }
+    // Send confirmation cards: an agent's confirm_send tool waits here until the user taps 发送 / 取消.
+    if (p === '/api/approvals' && req.method === 'POST') {
+      const b = await readBody(req), id = randomUUID().slice(0, 8);
+      const a = { id, thread: b.thread ?? null, platform: String(b.platform ?? ''), recipient: String(b.recipient ?? ''), text: String(b.text ?? ''), at: new Date().toISOString() };
+      running.get(a.thread)?.emit({ t: 'approval', ...a });
+      notify('Power 需要你确认', `发给 ${a.recipient}（${a.platform}）：${a.text}`);
+      telegram.approval(a);
+      const approved = await new Promise((ok) => { approvals.set(id, { ...a, ok }); setTimeout(() => ok(false), 10 * 60000); });
+      approvals.delete(id);
+      running.get(a.thread)?.emit({ t: 'approval_done', id, approved });
+      return json(res, 200, { approved });
+    }
+    if (p === '/api/approvals') return json(res, 200, [...approvals.values()].map(({ ok, ...a }) => a));
+    if (p.startsWith('/api/approvals/') && req.method === 'POST') {
+      const a = approvals.get(p.slice(15)); if (!a) return json(res, 404, { error: '已经处理过或超时了' });
+      a.ok(!!(await readBody(req)).approved); return json(res, 200, {});
+    }
+    // Deploys: exit once nothing is running; launchd (or the app) starts the new version.
+    if (p === '/api/restart' && req.method === 'POST') {
+      json(res, 200, { waiting: running.size });
+      const wait = setInterval(() => { if (!running.size) { clearInterval(wait); process.exit(0); } }, 1000);
+      return;
+    }
+    if (p === '/api/schedules' && req.method === 'POST') return json(res, 200, scheduler.upsert(await readBody(req)));
+    if (p === '/api/schedules') return json(res, 200, scheduler.list());
+    if (p === '/api/schedules/delete' && req.method === 'POST') { scheduler.remove((await readBody(req)).id); return json(res, 200, {}); }
+    if (p === '/api/schedules/run' && req.method === 'POST') return json(res, 200, { started: scheduler.runNow((await readBody(req)).id) });
+    if (p === '/api/telegram' && req.method === 'POST') {
+      const b = await readBody(req), st = loadSettings();
+      st.telegram = { ...st.telegram, ...(typeof b.token === 'string' ? { token: b.token.trim() || undefined, chatId: b.token.trim() ? st.telegram?.chatId : undefined } : {}),
+        ...(typeof b.enabled === 'boolean' ? { enabled: b.enabled } : {}), ...(typeof b.char === 'string' ? { char: b.char } : {}) };
+      saveSettings(st);
+      return json(res, 200, {});
+    }
+    if (p === '/api/telegram/pair' && req.method === 'POST') return json(res, 200, { code: telegram.newPairCode() });
+    if (p === '/api/telegram/test' && req.method === 'POST') { try { return json(res, 200, { bot: await telegram.test() }); } catch (e) { return json(res, 400, { error: e.message }); } }
+    if (p === '/api/telegram') { const t = loadSettings().telegram ?? {}; return json(res, 200, { hasToken: !!t.token, paired: !!t.chatId, char: t.char ?? '', enabled: t.enabled !== false, pairCode: t.pairCode ?? null }); }
     if (p === '/api/open-vault' && req.method === 'POST') {
       const v = vaultOf(); if (!v) return json(res, 400, { error: '还没设置 Obsidian 库' });
       spawn('open', [`obsidian://open?path=${encodeURIComponent(join(v, 'Power'))}`]); return json(res, 200, {});

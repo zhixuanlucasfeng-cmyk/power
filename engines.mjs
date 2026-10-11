@@ -9,6 +9,7 @@ import { join, delimiter } from 'node:path';
 import { homedir } from 'node:os';
 import { execFileSync } from 'node:child_process';
 
+const IMAGE = /\.(png|jpe?g|gif|webp)$/i;
 export const strip = (s) => String(s).replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '');
 const cut = (s) => strip(s).slice(0, 4000);
 
@@ -31,6 +32,23 @@ function parseClaude(ev, emit, st) {
   } else if (ev.type === 'result') {
     st.session = ev.session_id;
     emit({ t: 'done', error: ev.is_error ? ev.result : null, ms: ev.duration_ms });
+  }
+}
+
+// hermes chat -q (not quiet): tool steps print live ("┊ 🔎 find  *  3.2s"), the answer sits in a ╭─ ⚕ Hermes ─╮ box,
+// and a "Session: <id>" line lets the next turn resume. Fed raw text lines (lines: true).
+function parseHermes(raw, emit, st) {
+  const line = strip(raw).replace(/\r/g, '');
+  const sess = line.match(/^Session:\s+(\S+)/);
+  if (sess) { st.session = sess[1]; return; }
+  if (/^\s*╭─.*Hermes/.test(line)) { st.box = []; return; }
+  if (st.box && /^\s*╰/.test(line)) { emit({ t: 'text_start' }); emit({ t: 'text', d: st.box.join('\n').replace(/^\n+|\n+$/g, '') }); st.box = null; return; }
+  if (st.box) { st.box.push(line.replace(/^\s*│?\s{0,4}/, '').replace(/\s*│\s*$/, '')); return; }
+  const step = line.match(/^\s*┊\s*(\S+)\s+(.*?)\s*$/);
+  if (step && !/^preparing\b/.test(step[2])) {
+    const id = `h${(st.n = (st.n ?? 0) + 1)}`;
+    emit({ t: 'tool', id, name: `Hermes · ${step[2].split(/\s+/)[0]}`, input: { step: step[2] } });
+    emit({ t: 'tool_result', id, out: step[2], error: false });
   }
 }
 
@@ -78,6 +96,7 @@ export const ADAPTERS = {
       return m.filter((x) => x.visibility === 'list').map((x) => ({ id: x.slug, label: x.display_name ?? x.slug, efforts: (x.supported_reasoning_levels ?? []).map((r) => r.effort) }));
     },
     run: (o) => {
+      const imgs = (o.files ?? []).filter((f) => IMAGE.test(f)).flatMap((f) => ['-i', f]);
       const pick = [...(o.model ? ['-m', o.model] : []), ...(o.effort ? ['-c', `model_reasoning_effort="${o.effort}"`] : [])];
       // Extra tools (MCP servers) and network access for the sandbox, as -c overrides. Secrets travel as
       // whitelisted env vars (env_vars), never in argv.
@@ -87,12 +106,13 @@ export const ADAPTERS = {
           // codex exec can't ask for approval, so tools we hand it are pre-approved (or they'd always be refused).
           '-c', `mcp_servers.${n}.default_tools_approval_mode="approve"`])];
       return { parse: parseCodex, args: o.session
-        ? ['exec', ...cfg, 'resume', o.session, '--json', '--skip-git-repo-check', ...pick, o.prompt]
-        : ['exec', ...cfg, '--json', '--skip-git-repo-check', '-s', 'workspace-write', '-C', o.dir, ...pick, o.prompt] };
+        ? ['exec', ...cfg, 'resume', o.session, '--json', '--skip-git-repo-check', ...pick, ...imgs, o.prompt]
+        : ['exec', ...cfg, '--json', '--skip-git-repo-check', '-s', 'workspace-write', '-C', o.dir, ...pick, ...imgs, o.prompt] };
     } },
   opencode: { label: 'opencode', bins: ['opencode'], session: true,
-    run: (o) => ({ parse: parseOpencode, args: ['run', '--format', 'json', '--dir', o.dir, ...(o.session ? ['-s', o.session] : []), o.prompt] }) },
-  hermes: { label: 'Hermes', bins: ['hermes'], run: (o) => ({ args: ['-z', o.prompt] }) },
+    run: (o) => ({ parse: parseOpencode, args: ['run', '--format', 'json', '--dir', o.dir, ...(o.session ? ['-s', o.session] : []), ...(o.files ?? []).flatMap((f) => ['-f', f]), o.prompt] }) },
+  hermes: { label: 'Hermes', bins: ['hermes'], session: true,
+    run: (o) => ({ lines: true, parse: parseHermes, args: ['chat', '-q', o.prompt, ...(o.session ? ['--resume', o.session] : []), ...(o.files ?? []).filter((f) => IMAGE.test(f)).slice(0, 1).flatMap((f) => ['--image', f])] }) },
   pi: { label: 'pi', bins: ['pi'], run: (o) => ({ args: ['-p', o.prompt] }) },
   gemini: { label: 'Gemini CLI', bins: ['gemini'], run: (o) => ({ args: ['-p', o.prompt] }) },
   qwen: { label: 'Qwen Code', bins: ['qwen'], run: (o) => ({ args: ['-p', o.prompt] }) },
@@ -148,3 +168,5 @@ export function detect() {
   }
   return found;
 }
+
+export const PARSERS = { claude: parseClaude, codex: parseCodex, opencode: parseOpencode, hermes: parseHermes };

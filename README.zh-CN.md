@@ -15,6 +15,12 @@
 - **看得见的记忆：** 记忆存成 Obsidian 库里的 Markdown 笔记，一条一篇。每次发消息都会自动找出相关的几条给角色看。你在 Obsidian 里改或删，小队就按改过的来。
 - **一把钥匙接工具（可选）：** 接上 [Contract](https://github.com/zhixuanlucasfeng-cmyk/contract) 网关，就能用搜索、抓网页、社交、加密行情、金融、公司信息等工具，服务商挂了会自动换下一家。
 - **操作桌面 App（可选）：** 装了 [Cua Driver](https://github.com/trycua/cua) 之后，Claude 角色可以在后台操作 Mac 上的应用。
+- **群聊 @ 和自动派活：** `@名字` 只让这个人回答；不 @ 时按团队规则挑一个主答，最多再加两个人补充，不会人人都重复说一遍。"所有人轮流"模式也还在。
+- **附件：** 可以粘贴、拖入或点 📎 添加图片和文件。Claude 按路径读取，Codex 收图片（`-i`），opencode 收文件（`-f`）。
+- **定时任务：** 比如"每天 8 点让娜尤多汇总微信未读"，做完会弹通知给你结果。
+- **手机（Telegram）：** 和你在 @BotFather 建的机器人配对后，可以在手机上给小队发消息，确认卡片也能在手机上点「发送」或「取消」。
+- **发送确认卡片：** Agent 替你发消息或发帖前，会先调用 `confirm_send`，App（和手机）弹出卡片，你点「发送」才会真的发出去。
+- **一直在后台运行：** 后台服务由 launchd 管理（`power service ensure`），关掉窗口也不会中断对话；回复较慢时，做完会发通知。界面可选中文或 English。
 
 | | |
 |---|---|
@@ -36,6 +42,7 @@ Power 通过每个 Agent 自己的官方命令行来驱动它，和你在终端�
 git clone https://github.com/zhixuanlucasfeng-cmyk/power && cd power
 npm install
 ln -sf "$PWD/power" ~/.local/bin/power   # 把 power 命令加到 PATH
+power service ensure                     # 让后台服务常驻（launchd）
 power app                                # 第一次会编译 ~/Applications/Power.app 并打开
 ```
 
@@ -73,7 +80,7 @@ Claude 角色遵守 `~/.power/CLAUDE.md` 里的红线（这个文件由 `persona
 ## 开发
 
 ```sh
-npm test            # 记忆存储和自动回忆的测试
+npm test            # 记忆、各家输出解析，以及用假 Agent 跑的端到端对话测试（单聊、群聊、@、超时、附件、确认卡片）
 node app.mjs        # http://127.0.0.1:4545
 mac/build.sh        # 改了 mac/PowerApp.swift 之后重新编译 App
 ```
