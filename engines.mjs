@@ -12,6 +12,7 @@ import { execFileSync } from 'node:child_process';
 const IMAGE = /\.(png|jpe?g|gif|webp)$/i;
 export const strip = (s) => String(s).replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '');
 const cut = (s) => strip(s).slice(0, 4000);
+export const isCodexWriterConflict = (error) => /thread-store conflict|already has an active writer/i.test(String(error ?? ''));
 
 // claude -p --output-format stream-json --include-partial-messages
 function parseClaude(ev, emit, st) {
@@ -80,7 +81,7 @@ function parseCodex(ev, emit, st) {
       emit({ t: 'tool', id: it.id, name: it.tool || it.type, input: it.arguments ?? { query: it.query } });
       emit({ t: 'tool_result', id: it.id, out: '', error: false });
     }
-  } else if (ev.type === 'turn.failed' || ev.type === 'error') emit({ t: 'done', error: String(ev.error?.message ?? ev.message).slice(0, 500) });
+  } else if (ev.type === 'turn.failed' || ev.type === 'error') st.error = String(ev.error?.message ?? ev.message).slice(0, 500);
 }
 
 export const ADAPTERS = {

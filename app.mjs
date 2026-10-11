@@ -8,7 +8,7 @@ import { homedir } from 'node:os';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { openMemory, memoryDir } from './memory.mjs';
-import { ADAPTERS, detect, engineChoices, findBin, strip } from './engines.mjs';
+import { ADAPTERS, detect, engineChoices, findBin, isCodexWriterConflict, strip } from './engines.mjs';
 import { createScheduler } from './schedules.mjs';
 import { createTelegram } from './telegram.mjs';
 
@@ -209,7 +209,7 @@ function transcript(t) {
   return lines.filter((l) => !/^[^:]+:\s*$/.test(l));
 }
 
-// Run one turn of one agent. Streams UI events through emit; resolves with the new session id (if any).
+// Run one turn of one agent. Streams UI events through emit and returns its session/error state.
 function runTurn(t, c, { prompt, session, model, effort, ask, files }, emit, hold) {
   const isClaude = c.engine === 'claude';
   // Automatic recall: relevant notes from the shared 记忆本 ride along with every turn.
@@ -236,7 +236,7 @@ function runTurn(t, c, { prompt, session, model, effort, ask, files }, emit, hol
   });
   const bin = binOf(c);
   return new Promise((resolve) => {
-    if (!bin) { emit({ t: 'done', error: `找不到 ${c.engine}，点「重新扫描」看看` }); return resolve(null); }
+    if (!bin) { const error = `找不到 ${c.engine}，点「重新扫描」看看`; emit({ t: 'done', error }); return resolve({ session: null, error }); }
     const st = {}, started = Date.now();
     let buf = '', stderr = '', plain = '', done = false;
     const out = (e) => { if (e.t === 'done') done = true; emit(e); };
@@ -265,11 +265,13 @@ function runTurn(t, c, { prompt, session, model, effort, ask, files }, emit, hol
     child.stderr.on('data', (chunk) => (stderr += chunk));
     child.on('close', (code) => {
       clearInterval(beat);
-      if (timedOut) { out({ t: 'done', ms: Date.now() - started, error: `${display(c)} 超过 ${limitMs / 60000} 分钟还没完成，已停止（可在 ⚙️ 设置里调整上限）` }); return resolve(null); }
+      if (timedOut) { const error = `${display(c)} 超过 ${limitMs / 60000} 分钟还没完成，已停止（可在 ⚙️ 设置里调整上限）`; out({ t: 'done', ms: Date.now() - started, error }); return resolve({ session: null, error }); }
       plain += buf;
       if (!cmd.parse && strip(plain).trim()) { out({ t: 'text_start' }); out({ t: 'text', d: strip(plain).trim() }); }
-      if (!done) out({ t: 'done', ms: Date.now() - started, error: code ? (strip(stderr).trim().slice(-500) || `已停止 (${code})`) : null });
-      resolve(st.session ?? null);
+      const error = st.error ?? (code ? (strip(stderr).trim().slice(-500) || `已停止 (${code})`) : null);
+      const writerConflict = c.engine === 'codex' && !!session && isCodexWriterConflict(error);
+      if (!done && !writerConflict) out({ t: 'done', ms: Date.now() - started, error });
+      resolve({ session: st.session ?? null, error, writerConflict });
     });
   });
 }
@@ -396,8 +398,16 @@ async function runChat(prep, sink = () => {}) {
       const a = ADAPTERS[c.engine];
       const session = a.session ? t.sessions[char] : null;
       const prompt = (a.session ? text : withHistory(t, text)) + filesNote(files);
-      const s = await runTurn(t, c, { prompt, session, model, effort, ask: text, files }, emit, hold);
-      if (s && a.session) t.sessions[char] = s;
+      let result = await runTurn(t, c, { prompt, session, model, effort, ask: text, files }, emit, hold);
+      if (result.writerConflict) {
+        // Another Codex process owns this saved session. Keep Power's transcript, discard only the
+        // unusable engine session id, and retry once with recent context in a fresh Codex thread.
+        delete t.sessions[char];
+        emit({ t: 'wait', s: 0, who: `${display(c)} · 正在恢复会话` });
+        const retryPrompt = withHistory(t, text) + filesNote(files);
+        result = await runTurn(t, c, { prompt: retryPrompt, session: null, model, effort, ask: text, files }, emit, hold);
+      }
+      if (result.session && a.session) t.sessions[char] = result.session;
     } else {
       const say = async (m, extra, final) => {
         const mc = chars[m];

@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isDue } from './schedules.mjs';
-import { PARSERS } from './engines.mjs';
+import { PARSERS, isCodexWriterConflict } from './engines.mjs';
 
 const DIR = dirname(fileURLToPath(import.meta.url));
 const home = mkdtempSync(join(tmpdir(), 'power-e2e-'));
@@ -102,12 +102,20 @@ test('parsers: codex and opencode JSON events become UI events', () => {
   PARSERS.codex({ type: 'item.started', item: { id: 'c1', type: 'command_execution', command: 'ls' } }, emit, st);
   PARSERS.codex({ type: 'item.completed', item: { id: 'c1', type: 'command_execution', aggregated_output: 'a\n', exit_code: 0 } }, emit, st);
   PARSERS.codex({ type: 'item.completed', item: { type: 'agent_message', text: 'done' } }, emit, st);
+  PARSERS.codex({ type: 'error', message: 'network request failed' }, emit, st);
   assert.equal(st.session, 'T1');
+  assert.equal(st.error, 'network request failed');
   assert.deepEqual(out.map((e) => e.t), ['tool', 'tool_result', 'text_start', 'text']);
   const oc = [], s2 = {};
   PARSERS.opencode({ type: 'text', sessionID: 'S', part: { text: 'yo' } }, (e) => oc.push(e), s2);
   assert.equal(s2.session, 'S');
   assert.equal(oc.at(-1).d, 'yo');
+});
+
+test('codex: only active-writer conflicts trigger a fresh-session retry', () => {
+  assert.equal(isCodexWriterConflict('thread-store conflict: thread T already has an active writer'), true);
+  assert.equal(isCodexWriterConflict('network request failed'), false);
+  assert.equal(isCodexWriterConflict(null), false);
 });
 
 test('parsers: hermes live steps, boxed answer and resumable session', () => {
