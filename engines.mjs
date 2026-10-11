@@ -79,9 +79,16 @@ export const ADAPTERS = {
     },
     run: (o) => {
       const pick = [...(o.model ? ['-m', o.model] : []), ...(o.effort ? ['-c', `model_reasoning_effort="${o.effort}"`] : [])];
+      // Extra tools (MCP servers) and network access for the sandbox, as -c overrides. Secrets travel as
+      // whitelisted env vars (env_vars), never in argv.
+      const cfg = [...(o.network ? ['-c', 'sandbox_workspace_write.network_access=true'] : []),
+        ...Object.entries(o.mcp ?? {}).flatMap(([n, m]) => ['-c', `mcp_servers.${n}.command=${JSON.stringify(m.command)}`,
+          '-c', `mcp_servers.${n}.args=${JSON.stringify(m.args ?? [])}`, ...(m.envVars?.length ? ['-c', `mcp_servers.${n}.env_vars=${JSON.stringify(m.envVars)}`] : []),
+          // codex exec can't ask for approval, so tools we hand it are pre-approved (or they'd always be refused).
+          '-c', `mcp_servers.${n}.default_tools_approval_mode="approve"`])];
       return { parse: parseCodex, args: o.session
-        ? ['exec', 'resume', o.session, '--json', '--skip-git-repo-check', ...pick, o.prompt]
-        : ['exec', '--json', '--skip-git-repo-check', '-s', 'workspace-write', '-C', o.dir, ...pick, o.prompt] };
+        ? ['exec', ...cfg, 'resume', o.session, '--json', '--skip-git-repo-check', ...pick, o.prompt]
+        : ['exec', ...cfg, '--json', '--skip-git-repo-check', '-s', 'workspace-write', '-C', o.dir, ...pick, o.prompt] };
     } },
   opencode: { label: 'opencode', bins: ['opencode'], session: true,
     run: (o) => ({ parse: parseOpencode, args: ['run', '--format', 'json', '--dir', o.dir, ...(o.session ? ['-s', o.session] : []), o.prompt] }) },
