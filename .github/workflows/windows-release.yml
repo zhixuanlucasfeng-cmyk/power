@@ -1,0 +1,31 @@
+name: Publish Windows preview
+on:
+  workflow_dispatch:
+    inputs:
+      build_run:
+        description: Successful Windows build run ID
+        required: true
+      tag:
+        description: Existing draft release tag
+        required: true
+permissions:
+  actions: read
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: Power-Windows-x64
+          path: download
+          run-id: ${{ inputs.build_run }}
+          github-token: ${{ github.token }}
+      - name: Upload and publish draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          gh release upload "$RELEASE_TAG" download/Power-Windows-x64.zip
+          gh release edit "$RELEASE_TAG" --draft=false
