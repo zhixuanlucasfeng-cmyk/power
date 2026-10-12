@@ -4,11 +4,11 @@ Windows x64 uses the same Electron desktop and shared browser tabs as macOS.
 
 ## Download and launch
 
-Download **Power-Setup-x64.exe** from the [Windows installer release](https://github.com/zhixuanlucasfeng-cmyk/power/releases/tag/v0.4.0-windows-preview.2). This is a public download. Development builds are also available as artifacts of successful [Windows builds](https://github.com/zhixuanlucasfeng-cmyk/power/actions/workflows/windows.yml); those artifact downloads require GitHub sign-in.
+Download **Power-Setup-x64.exe** from the [Windows installer release](https://github.com/zhixuanlucasfeng-cmyk/power/releases/tag/v0.4.0-windows-preview.3). This is a public download. Development builds are also available as artifacts of successful [Windows builds](https://github.com/zhixuanlucasfeng-cmyk/power/actions/workflows/windows.yml); those artifact downloads require GitHub sign-in.
 
 Run the installer, then open **Power** from the Start menu or desktop shortcut. Installation is per-user and does not require administrator access. The package includes Node and Electron. Uninstall Power through Windows Settings; chats and browser sessions are retained. The optional portable ZIP can still be extracted and launched with **Power.exe** or **Power.cmd**. The launcher starts the local Power server, opens the desktop and stops its server when the app exits. Background schedules therefore require keeping Power running. This preview installer is unsigned; Windows may display an unknown-publisher warning.
 
-Install and sign in to the agent CLI you want to use separately. Power does not include anyone else's subscription or login. Native Windows `.exe`, `.cmd` and `.bat` agent commands are detected on PATH. WSL-only CLIs are not automatically bridged into the Windows app.
+On first launch, follow **Install → Sign in → Test → Start chatting** to install official Codex and connect your own ChatGPT account. No terminal or separate npm installation is needed. If browser sign-in fails, choose the device-code fallback. The test sends one short model request using your account allowance. Reopen the wizard with **配置 Agent / Setup**. Power does not include a subscription; other agent CLIs still require separate installation and login. Native Windows `.exe`, `.cmd` and `.bat` agent commands are detected on PATH. WSL-only CLIs are not automatically bridged into the Windows app.
 
 Use **Browser → +** to open a tab. Log in directly on the website, then return control to the agent. Browser sessions stay in `%USERPROFILE%\.power\desktop`; app data stays in `%USERPROFILE%\.power`. These are separate from normal Chrome logins.
 
