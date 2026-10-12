@@ -19,6 +19,8 @@ jobs:
         env:
           POWER_TEST_DESKTOP: '1'
       - run: npm run windows:build
+      - name: Test packaged app startup
+        run: node desktop/windows-smoke.mjs
       - name: Package Windows download
         run: Compress-Archive -Path dist/Power-Windows-x64 -DestinationPath dist/Power-Windows-x64.zip
       - uses: actions/upload-artifact@v4
