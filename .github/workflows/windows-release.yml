@@ -27,5 +27,5 @@ jobs:
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ inputs.tag }}
         run: |
-          gh release upload "$RELEASE_TAG" download/Power-Windows-x64.zip
+          gh release upload "$RELEASE_TAG" download/Power-Windows-x64.zip download/Power-Setup-x64.exe
           gh release edit "$RELEASE_TAG" --draft=false

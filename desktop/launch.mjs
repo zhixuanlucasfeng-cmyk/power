@@ -9,7 +9,7 @@ const available=async()=>{try{const r=await fetch(base+'/api/meta',{signal:Abort
 let server;
 try {
  if(!await available()){
-  server=spawn(process.execPath,['app.mjs'],{cwd:root,stdio:'inherit',env:process.env});
+  server=spawn(process.execPath,['app.mjs'],{cwd:root,windowsHide:true,stdio:'inherit',env:process.env});
   server.on('error',e=>console.error(e.message));
   for(let i=0;i<100&&!await available();i++){
    if(server.exitCode!==null)throw new Error('Power server exited during startup');
@@ -18,7 +18,7 @@ try {
   if(!await available())throw new Error('Power server did not start');
  }
  const electron=process.env.POWER_ELECTRON||createRequire(import.meta.url)('electron');
- const app=spawn(electron,[resolve(root,'desktop/main.cjs')],{cwd:root,stdio:'inherit',env:process.env});
+ const app=spawn(electron,[resolve(root,'desktop/main.cjs')],{cwd:root,windowsHide:true,stdio:'inherit',env:process.env});
  await new Promise((resolve,reject)=>{app.once('error',reject);app.once('exit',code=>code?reject(new Error(`Power exited (${code})`)):resolve());});
 } catch(e){console.error(e.message);process.exitCode=1;}
 finally{server?.kill();}

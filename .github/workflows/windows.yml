@@ -21,9 +21,21 @@ jobs:
       - run: npm run windows:build
       - name: Test packaged app startup
         run: node desktop/windows-smoke.mjs
+      - name: Build desktop launcher
+        run: |
+          & "$env:WINDIR\Microsoft.NET\Framework64\v4.0.30319\csc.exe" /nologo /target:winexe /reference:System.Windows.Forms.dll /out:dist/Power-Windows-x64/Power.exe desktop/windows/Launcher.cs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Build installer
+        run: |
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" desktop/windows/installer.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Test install, launch and uninstall
+        run: ./desktop/windows/test-installer.ps1
       - name: Package Windows download
         run: Compress-Archive -Path dist/Power-Windows-x64 -DestinationPath dist/Power-Windows-x64.zip
       - uses: actions/upload-artifact@v4
         with:
           name: Power-Windows-x64
-          path: dist/Power-Windows-x64.zip
+          path: |
+            dist/Power-Windows-x64.zip
+            dist/Power-Setup-x64.exe
