@@ -118,6 +118,7 @@ export function createBrowser({ home, headless = false, channel, outputDir = joi
       if (action === 'frame') {
         const task = queue.catch(() => {}).then(async () => {
         if (!context) return { started: false, manual };
+        if (embedded) activePage = await embedded.active();
         const pages = context.pages();
         if (!activePage || activePage.isClosed()) activePage = pages.at(-1);
         if (!activePage) return { started: false, manual };
@@ -158,7 +159,9 @@ export function createBrowser({ home, headless = false, channel, outputDir = joi
           const { client } = await connect();
           const result = await client.callTool({ name: 'browser_tabs', arguments: { action: 'select', index } });
           if (result.isError) throw new Error('切换标签页失败');
-          activePage = pages[index]; return { ok: true };
+          activePage = pages[index];
+          if (embedded) await embedded.select(activePage);
+          return { ok: true };
         }
         const page = activePage;
         if (!page || page.isClosed()) throw new Error('请先打开浏览器');

@@ -291,7 +291,7 @@
 </main>
 <section id="browserpanel" aria-label="Power 浏览器">
   <div class="browserbar"><b style="flex:1">浏览器</b><button id="btake">手动接管</button><button id="bnative">独立窗口</button><button id="bclose" aria-label="收起浏览器">✕</button></div>
-  <div class="browserbar"><select id="bmode" aria-label="浏览器连接"><option value="managed">Power 独立浏览器</option><option value="extension">我的 Chrome · 已有登录</option></select><button id="bconnect">连接</button><button id="bdisconnect">断开</button><a href="https://chromewebstore.google.com/detail/playwright-extension/mmlmfjhmonkocbjadbfplnigmagldckm" target="_blank" rel="noopener">安装 Chrome 扩展</a></div>
+  <div class="browserbar"><select id="bmode" aria-label="浏览器连接"><option value="embedded">Power.app 内置浏览器</option><option value="managed">Power 独立浏览器</option><option value="extension">我的 Chrome · 已有登录</option></select><button id="bconnect">连接</button><button id="bdisconnect">断开</button><a href="https://chromewebstore.google.com/detail/playwright-extension/mmlmfjhmonkocbjadbfplnigmagldckm" target="_blank" rel="noopener">安装 Chrome 扩展</a></div>
   <form class="browserbar" id="bnav"><button type="button" id="bback" aria-label="后退">←</button><button type="button" id="breload" aria-label="刷新">↻</button><input id="burl" aria-label="网页地址" placeholder="输入网址" autocomplete="off"><button>前往</button></form>
   <div id="btabbar"><div id="btabs"></div><button id="bnew" type="button" aria-label="New tab" title="新标签页 / New tab">+</button></div><div id="bstatus" role="status">正在连接浏览器…</div>
   <div id="bnotice" hidden>网站拒绝了此次访问。可以手动接管检查页面，或在独立窗口操作。若仍被拦截，请联系网站并提供页面上的 Incident ID；切换面板不能解除网站限制。</div>
@@ -1094,11 +1094,11 @@ function grow() { const t = $('#input'); t.style.height = 'auto'; t.style.height
     document.body.classList.remove('workspaceopen');
     opened = true; seen = true; document.body.classList.add('browseropen');
     const state = await api('status'); el('bmode').value=state.mode;
-    if(state.mode==='managed' || state.started) {await api('start'); await refresh();}
+    if(state.mode==='managed' || state.mode==='embedded' || state.started) {await api('start'); await refresh();}
     else status('点击「连接」，然后在 Chrome 中选择允许 Power 使用的标签页。首次使用请安装扩展。');
   };
   el('bmode').onchange = async () => { try {await api('configure',{mode:el('bmode').value});frame=null;await refresh();status('已切换浏览器来源，点击「连接」继续');}catch(e){status(e.message);el('bmode').value=(await api('status')).mode;} };
-  el('bconnect').onclick = async () => {el('bconnect').disabled=true;connecting=true;lastError='';status('正在连接；请在 Chrome 中选择标签页并允许连接…');try{await api('start');connecting=false;await refresh();}catch(e){status(e.message);}finally{connecting=false;el('bconnect').disabled=false;}};
+  el('bconnect').onclick = async () => {el('bconnect').disabled=true;connecting=true;lastError='';status(el('bmode').value==='extension'?'正在连接；请在 Chrome 中选择标签页并允许连接…':'正在连接浏览器…');try{await api('start');connecting=false;await refresh();}catch(e){status(e.message);}finally{connecting=false;el('bconnect').disabled=false;}};
   el('bdisconnect').onclick = async () => {try{await api('disconnect');frame=null;await refresh();status('已断开连接');}catch(e){status(e.message);}};
   el('browsert').onclick = () => window.openPowerBrowser().catch((e) => status(e.message));
   el('bclose').onclick = async () => { await command('resume'); opened = false; document.body.classList.remove('browseropen'); };

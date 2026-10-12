@@ -23,5 +23,10 @@ test('embedded Chromium shares real tabs with agent tools without exposing the c
  browser.release('test');
  await browser.panel('takeover');await browser.panel('new');
  state=await rpc('state');assert.equal(state.tabs.length,3);assert.equal(state.active,state.tabs[2].id,'New panel tab is selected in the native browser');
+ const frame=await browser.panel('frame');
+ await browser.panel('tab',{id:frame.tabs[0].id});
+ assert.equal((await rpc('state')).active,state.tabs[0].id,'Panel selection is visible in the desktop');
+ await rpc('select',{id:state.tabs[2].id});
+ assert.equal((await browser.panel('frame')).pageId,frame.tabs[2].id,'Panel follows desktop selection');
  await browser.close();assert.equal((await rpc('state')).tabs.length,3,'Disconnect preserves native tabs');
 });

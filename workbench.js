@@ -8,12 +8,12 @@
   const pane=document.createElement('section');pane.id='workbench';pane.setAttribute('aria-label','Power 工作台');
   pane.innerHTML='<div class="wbhead"><b>工作台</b><button id="wbclose" aria-label="收起工作台">✕</button></div><nav id="wbnav"><button data-tab="files">文件与预览</button><button data-tab="images">图片</button><button data-tab="review">代码审查</button><button data-tab="jobs">并行任务</button><button data-tab="connections">连接器</button></nav><div id="wbstatus" role="status"></div><div id="wbbody"></div>';
   document.body.append(pane);
-  const button=document.createElement('button');button.textContent='▣ 工作台';button.id='workbencht';button.onclick=()=>open();$('.ctl').append(button);
+  const button=document.createElement('button');button.textContent='▣ 工作台';button.id='workbencht';button.onclick=()=>window.openPowerWorkbench();$('.ctl').append(button);
   const status=(s)=>{$('#wbstatus').textContent=s || '';};
   async function api(path,body) {const r=await fetch('/api/'+path,body===undefined?{}:{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const d=await r.json();if(!r.ok)throw new Error(d.error || `请求失败 ${r.status}`);return d;}
   const action=(fn)=>async(e)=>{try{status('');await fn(e);}catch(err){status(err.message);}};
   function context(){return window.powerContext?.() || {};}
-  async function open(next=tab){opened=true;document.body.classList.add('workspaceopen');tab=next;await render();}
+  async function open(next=tab){opened=true;document.body.classList.remove('browseropen');document.body.classList.add('workspaceopen');tab=next;await render();}
   window.openPowerWorkbench=(next)=>open(next).catch(e=>status(e.message));
   $('#wbclose').onclick=()=>{opened=false;document.body.classList.remove('workspaceopen');};
   $('#wbnav').onclick=action(async(e)=>{if(e.target.dataset.tab){tab=e.target.dataset.tab;preview=null;await render();}});
@@ -22,7 +22,7 @@
   async function files(){const items=await api('artifacts');$('#wbbody').innerHTML='<p class="dim">聊天附件和生成文件。支持 PDF、Office 内容、图片、音视频，以及交互 HTML。</p><label class="wbbutton">添加文件<input id="wbfilepick" type="file" hidden></label><div id="wbfiles">'+(items.map(artifactButton).join('') || '<p>暂无文件。可让 Agent 生成报告，并调用 show_artifact 展示。</p>')+'</div>';
     $('#wbfilepick').onchange=action(async(e)=>{const f=e.target.files[0];if(!f)return;const r=await fetch('/api/upload',{method:'POST',headers:{'x-filename':encodeURIComponent(f.name),'Content-Type':f.type || 'application/octet-stream'},body:f});const d=await r.json();if(!r.ok)throw new Error(d.error);await showPreview(decodeURIComponent(d.url.split('/').pop()));});
   }
-  async function showPreview(id){tab='files';opened=true;document.body.classList.add('workspaceopen');status('正在打开…');preview=id;sourceShown=false;const data=await api('artifacts/preview',{id});if(preview!==id)return;status(data.note || '');const url='/upload/'+encodeURIComponent(id), media='/api/artifacts/media?id='+encodeURIComponent(id);
+  async function showPreview(id){tab='files';opened=true;document.body.classList.remove('browseropen');document.body.classList.add('workspaceopen');status('正在打开…');preview=id;sourceShown=false;const data=await api('artifacts/preview',{id});if(preview!==id)return;status(data.note || '');const url='/upload/'+encodeURIComponent(id), media='/api/artifacts/media?id='+encodeURIComponent(id);
     $('#wbbody').innerHTML=`<div class="wbrow"><button id="wbback">← 文件</button><a href="${url}" download>下载原文件</a>${data.editable?'<button id="wbsource">编辑源码</button><button id="wbsave" hidden>保存副本</button>':''}</div><div id="wbpreview"></div>`;
     $('#wbback').onclick=action(()=>render());const host=$('#wbpreview');
     if(data.kind==='html'){const frame=document.createElement('iframe');frame.title='文件预览';frame.sandbox='allow-scripts';frame.referrerPolicy='no-referrer';const csp="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src data: blob:; connect-src 'none'; frame-src 'none'; form-action 'none'; base-uri 'none';";frame.srcdoc=`<meta http-equiv="Content-Security-Policy" content="${csp}">`+data.html;host.append(frame);
