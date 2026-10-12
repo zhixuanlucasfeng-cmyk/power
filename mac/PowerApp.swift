@@ -67,11 +67,12 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKUIDe
 
     func waitThenLoad(tries: Int) {
         if serverUp() { web.load(URLRequest(url: home)); return }
+        // Right after login launchd can take a minute to bring the server up: say so, but keep polling and load it once it's up.
         if tries == 0 {
-            web.loadHTMLString("<body style='background:#0a0c18;color:#eee;font:15px -apple-system;padding:40px'>Power 服务没起来。看看 ~/.power/app.log</body>", baseURL: nil)
-            return
+            web.loadHTMLString("<body style='background:#0a0c18;color:#eee;font:15px -apple-system;padding:40px;line-height:1.7'>Power 服务还在启动，起来后会自动打开…<br><span style='color:#889'>一直卡着？在终端运行 <code>power service restart</code>，日志：<code>~/.power/app.log</code></span></body>", baseURL: nil)
+            startServerIfNeeded()
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { self.waitThenLoad(tries: tries - 1) }
+        DispatchQueue.main.asyncAfter(deadline: .now() + (tries > 0 ? 0.25 : 2)) { self.waitThenLoad(tries: max(tries - 1, -1)) }
     }
 
     // JS → native: folder picker.

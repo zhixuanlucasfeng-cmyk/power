@@ -49,6 +49,8 @@ power app                                # 第一次会编译 ~/Applications/Pow
 
 不想用 Mac App 的话：运行 `node app.mjs`，然后打开 <http://127.0.0.1:4545>。
 
+App 一直显示“服务还在启动”？运行 `power service restart`（看原因用 `power service log`）。拉取更新后用 `mac/build.sh` 重新编译 App。
+
 ## 设置
 
 都在 **⚙️ 设置** 里：

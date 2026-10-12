@@ -49,6 +49,8 @@ power app                                # builds ~/Applications/Power.app on fi
 
 No Mac app? Run `node app.mjs` and open <http://127.0.0.1:4545>.
 
+App stuck on "server is starting"? Run `power service restart` (or `power service log` to see why). After pulling updates, rebuild the app with `mac/build.sh`.
+
 ## Configure
 
 Everything lives in **⚙️ Settings**:
