@@ -26,7 +26,7 @@ export function createOnboarding({home,root,find=findBin,run=spawn}) {
  }
  return {status,
   async start(action){
-   if(!['install','login','verify'].includes(action))throw new Error('未知配置操作');
+   if(!['install','login','deviceLogin','verify'].includes(action))throw new Error('未知配置操作');
    if(job?.status==='running')throw new Error('请等待当前步骤完成，或先取消');
    let bin=find('codex'),args,timeout=180000;
    if(action==='install'){
@@ -38,7 +38,7 @@ export function createOnboarding({home,root,find=findBin,run=spawn}) {
     timeout=600000;
    }else{
     if(!bin)throw new Error('请先安装 Codex');
-    if(action==='login'){args=['login','--device-auth'];timeout=900000;}
+    if(action==='login'||action==='deviceLogin'){args=action==='deviceLogin'?['login','--device-auth']:['login'];timeout=900000;}
     else {if(!(await status()).authenticated)throw new Error('请先完成 ChatGPT 登录');args=['exec','--json','--ignore-user-config','--ephemeral','--skip-git-repo-check','-s','read-only','-C',home,'-c','forced_login_method="chatgpt"','Reply with exactly POWER_READY. Do not use tools or read files.'];}
    }
    mkdirSync(home,{recursive:true});verified=false;
