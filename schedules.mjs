@@ -4,14 +4,14 @@ import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 
-// Is task s due at time `now`? daily: at/after HH:MM on chosen weekdays, once per day. every: N minutes apart.
+// Is task s due at time `now`? daily: at/after HH:MM on chosen weekdays, once per day. monthly: same, on day 1–28. every: N minutes apart.
 export function isDue(s, now = new Date()) {
   if (!s.enabled) return false;
   const last = s.lastRun ? new Date(s.lastRun) : null;
   if (s.when?.type === 'every') return !last || now - last >= Math.max(5, Number(s.when.minutes) || 60) * 60000;
   const [h, m] = String(s.when?.time ?? '08:00').split(':').map(Number);
   const days = s.when?.days?.length ? s.when.days : [0, 1, 2, 3, 4, 5, 6];
-  if (!days.includes(now.getDay())) return false;
+  if (s.when?.type === 'monthly' ? now.getDate() !== Number(s.when.day) : !days.includes(now.getDay())) return false;
   const at = new Date(now); at.setHours(h, m, 0, 0);
   return now >= at && (!last || last < at);
 }
@@ -31,14 +31,23 @@ export function createScheduler({ home, prepareChat, runChat, running, notify, l
     if (cur) { cur.lastRun = new Date().toISOString(); save(list); }
     try {
       const thread = s.thread && existsSync(join(home, 'threads', `${s.thread}.json`)) && !running.has(s.thread) ? s.thread : undefined;
-      const prep = prepareChat({ thread, text: s.text, char: s.char, members: s.members, mode: 'auto', source: 'schedule' });
-      if (!thread) prep.t.title = `⏰ ${s.name}`;
-      const { t, reply } = await runChat(prep);
+      // A failed run is retried up to 3 times before the error is reported.
+      let t, reply;
+      for (let attempt = 1; ; attempt++) {
+        try {
+          const prep = prepareChat({ thread: thread ?? t?.id, text: s.text, char: s.char, members: s.members, mode: 'auto', source: 'schedule' });
+          if (!thread && !t) prep.t.title = `⏰ ${s.name}`;
+          ({ t, reply } = await runChat(prep));
+          if (!t.events.findLast?.((e) => e.t === 'done')?.error || attempt >= 3) break;
+        } catch (e) { if (attempt >= 3) throw e; }
+        await new Promise((r) => setTimeout(r, 30000 * attempt));
+      }
       const after = load(), x = after.find((y) => y.id === s.id);
       if (x) { x.thread = t.id; x.lastResult = reply.slice(0, 300); save(after); }
       notify(`⏰ ${s.name}`, reply || '完成了');
     } catch (e) {
       log(`schedule ${s.name}: ${e.message}`);
+      notify(`⏰ ${s.name} 失败了`, `重试 3 次仍失败：${e.message}`);
     } finally { busy.delete(s.id); }
   }
 

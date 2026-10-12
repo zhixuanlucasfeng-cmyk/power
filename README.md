@@ -90,6 +90,17 @@ Data stays on your machine in `~/.power`: chats, settings, and pictures you drop
 - Characters whose engine isn't installed are hidden automatically.
 - Drop a picture on a badge to give a character a face.
 
+## Computer steward
+
+Ask in plain words; any character can do it.
+
+- **Find a file by what's in it:** "find the Word script that mentions 本草纲目". Searches file contents through Spotlight (macOS) or Windows Search across every indexed disk, ranks by match and recency, shows a snippet, and can open the file. Covers Word, Excel, PowerPoint, PDF, text, Markdown and code.
+- **Diagnose:** "my Mac boots slowly" / "why is it lagging". A read-only check of uptime, startup items, disk health, memory, top processes and junk, then a report with causes and options. Nothing changes without your yes.
+- **Tidy and clean on a schedule:** "every Monday 9:00 sort my Downloads into videos, images, audio" or "on the 1st of each month clean junk older than 30 days". Tidying only moves files and writes an undo log in `~/.power/tidy-log`. Cleaning moves old cache, log and temp files to the Trash / Recycle Bin and always asks first. Failed scheduled runs retry 3 times.
+- **From your phone (Telegram):** send a task. Progress steps, result files and scheduled-task results come back to the chat.
+
+All of it runs locally; search uses the OS index and nothing is uploaded. Windows support is untested.
+
 ## Terminal mode
 
 `power` (with no arguments) starts Claude Code with Power's memory plugin, skills and persona. This is useful for things that only work in an interactive session, such as Claude Code's own computer use.

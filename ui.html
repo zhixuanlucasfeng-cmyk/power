@@ -580,7 +580,8 @@ new MutationObserver((ms) => { if (META?.settings?.language === 'en') for (const
 let SCHEDS = [];
 async function loadScheds() {
   SCHEDS = await (await fetch('/api/schedules')).json();
-  const when = (w) => (w?.type === 'every' ? `每 ${w.minutes} 分钟` : `每天 ${w?.time ?? '08:00'}`);
+  const when = (w) => (w?.type === 'every' ? `每 ${w.minutes} 分钟` : w?.type === 'monthly' ? `每月 ${w.day} 号 ${w.time}`
+    : `${w?.days?.length && w.days.length < 7 ? `每周${w.days.map((d) => '日一二三四五六'[d]).join('、')}` : '每天'} ${w?.time ?? '08:00'}`);
   const who = (x) => (x.members?.length ? x.members.map(nm).join('、') : nm(x.char));
   $('#scheds').innerHTML = SCHEDS.length ? SCHEDS.map((x) => `<div class="srow"><div class="sinfo"><b>${esc(x.name)}</b><small>${when(x.when)} · ${esc(who(x))} · ${esc(x.text.slice(0, 60))}${x.lastRun ? ` · 上次 ${new Date(x.lastRun).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}` : ''}</small></div>
     <button class="mini" data-scrun="${x.id}">立即运行</button><button class="mini" data-scdel="${x.id}">删除</button><label class="sw"><input type="checkbox" data-scon="${x.id}" ${x.enabled ? 'checked' : ''}><span></span></label></div>`).join('')

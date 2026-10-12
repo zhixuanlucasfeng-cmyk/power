@@ -3,6 +3,7 @@ import { copyFileSync, realpathSync, statSync } from 'node:fs';
 import { basename, isAbsolute, join, relative } from 'node:path';
 import { parseTool } from './power-tools.mjs';
 import { scopedFile } from './artifacts.mjs';
+import { cleanJunk, findFiles, openFile, systemCheck, tidyFolder } from './pc-tools.mjs';
 
 export function createAgentTools({ browser, home, uploads, scheduler, emit, notify, confirm, integrations, artifacts, image, review, jobs, characters }) {
   const sessions = new Map(), questions = new Map();
@@ -147,12 +148,30 @@ export function createAgentTools({ browser, home, uploads, scheduler, emit, noti
         if (args.action === 'list') return text({ timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, schedules: scheduler.list() });
         const existing = args.id ? scheduler.list().find((x) => x.id === args.id) : null;
         if (args.id && !existing) throw new Error('找不到这个定时任务，请先 list');
+        if (args.action === 'run') {
+          if (!args.id) throw new Error('立即执行需要任务 id');
+          scheduler.runNow(args.id); return text({ started: args.id, note: '已开始执行，结果会出现在该任务的对话里并发送通知' });
+        }
         if (args.action === 'delete') {
           if (!args.id) throw new Error('删除需要任务 id');
           scheduler.remove(args.id); return text({ deleted: args.id });
         }
         if (!existing && (!args.name || !args.text || !args.when)) throw new Error('新任务需要 name、text 和 when');
         return text(scheduler.upsert({ ...existing, ...args, char: existing?.char ?? s.char }));
+      }
+      if (name === 'find_files') {
+        if (args.action === 'open') return text(openFile(args.path ?? ''));
+        return text(await findFiles({ terms: args.terms ?? [], kinds: args.kinds, limit: args.limit }));
+      }
+      if (name === 'system_check') return text(await systemCheck(args));
+      if (name === 'organize_files') {
+        if (args.action === 'tidy') return text(tidyFolder({ folder: args.folder ?? '', dryRun: args.dry_run, logDir: join(home, 'tidy-log') }));
+        return text(await cleanJunk({ keepDays: args.keep_days, dryRun: args.dry_run, confirm: async (summary) => {
+          if (s.waitSince) throw new Error('已有一个问题等待用户回答');
+          s.waitSince = Date.now();
+          try { return await confirm({ thread: s.thread, platform: '电脑管家', recipient: '清理垃圾文件', text: summary }, s.controller.signal); }
+          finally { s.waited += Date.now() - s.waitSince; s.waitSince = 0; }
+        } }));
       }
       throw new Error('Unknown tool');
     },

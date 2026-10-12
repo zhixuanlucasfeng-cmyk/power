@@ -479,8 +479,9 @@ async function send(req, res) {
   res.end();
 }
 
-const scheduler = createScheduler({ home: HOME, prepareChat, runChat, running, notify, log: (m) => console.error(m) });
-const telegram = createTelegram({ loadSettings, saveSettings, prepareChat, runChat, allChars, approvals, log: (m) => console.error(m) });
+// Scheduled results also reach the paired phone.
+const scheduler = createScheduler({ home: HOME, prepareChat, runChat, running, notify: (title, body) => { notify(title, body); telegram.push(`${title}\n${body}`); }, log: (m) => console.error(m) });
+const telegram = createTelegram({ loadSettings, saveSettings, prepareChat, runChat, allChars, approvals, uploads: UPLOADS, log: (m) => console.error(m) });
 async function requestApproval(b, signal) {
   const id = randomUUID().slice(0, 8);
   const a = { id, thread: b.thread ?? null, platform: String(b.platform ?? ''), recipient: String(b.recipient ?? ''), text: String(b.text ?? ''), at: new Date().toISOString() };

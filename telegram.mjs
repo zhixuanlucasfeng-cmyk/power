@@ -1,10 +1,12 @@
 // Phone access through a Telegram bot you create with @BotFather.
 // Pair once by sending "/pair <code>" (code shown in Settings); after that only that chat is accepted.
 // Messages go to your default character (or "@Name message"); replies come back; send-confirmation cards arrive as
-// buttons you can tap on the phone.
+// buttons you can tap on the phone. Task progress (plan steps) and generated files are synced to the chat as they happen.
 import { randomInt } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { basename, join } from 'node:path';
 
-export function createTelegram({ loadSettings, saveSettings, prepareChat, runChat, allChars, approvals, log = () => {} }) {
+export function createTelegram({ loadSettings, saveSettings, prepareChat, runChat, allChars, approvals, uploads, log = () => {} }) {
   let offset = 0, stop = false, polling = false;
   const api = async (method, body) => {
     const token = loadSettings().telegram?.token;
@@ -13,6 +15,31 @@ export function createTelegram({ loadSettings, saveSettings, prepareChat, runCha
     const j = await r.json();
     if (!j.ok) throw new Error(j.description ?? `telegram ${r.status}`);
     return j.result;
+  };
+  const sendFile = async (chatId, file, caption) => {
+    const form = new FormData();
+    form.append('chat_id', String(chatId));
+    if (caption) form.append('caption', caption.slice(0, 1000));
+    form.append('document', new Blob([readFileSync(file)]), basename(file).replace(/^[0-9a-f-]{36}-/, ''));
+    const r = await fetch(`https://api.telegram.org/bot${loadSettings().telegram?.token}/sendDocument`, { method: 'POST', body: form });
+    const j = await r.json(); if (!j.ok) throw new Error(j.description ?? `telegram ${r.status}`);
+  };
+  // One progress message per task, edited in place as plan steps change.
+  const progressSink = (chatId) => {
+    let msgId = null, last = '', chain = Promise.resolve();
+    const mark = { completed: '✅', in_progress: '⏳', pending: '▫️' };
+    return (e) => {
+      if (e.t === 'plan') {
+        const body = `进度\n${e.steps.map((x) => `${mark[x.status] ?? '▫️'} ${x.step}`).join('\n')}`;
+        if (body === last) return;
+        last = body;
+        chain = chain.then(async () => {
+          if (msgId) await api('editMessageText', { chat_id: chatId, message_id: msgId, text: body }).catch(() => {});
+          else msgId = (await api('sendMessage', { chat_id: chatId, text: body }).catch(() => null))?.message_id ?? null;
+        });
+      }
+      if (e.t === 'artifact' && e.id && uploads) chain = chain.then(() => sendFile(chatId, join(uploads, e.id), e.title).catch((err) => say(chatId, `文件 ${e.title} 发送失败：${err.message}`).catch(() => {})));
+    };
   };
   const say = async (chatId, text, extra = {}) => {
     for (let i = 0; i < text.length || i === 0; i += 3900) await api('sendMessage', { chat_id: chatId, text: text.slice(i, i + 3900) || '…', ...extra });
@@ -48,7 +75,7 @@ export function createTelegram({ loadSettings, saveSettings, prepareChat, runCha
     }
     if (!threads[char]) prep.t.title = `📱 ${prep.t.title}`;
     await api('sendChatAction', { chat_id: chatId, action: 'typing' }).catch(() => {});
-    const { t, reply } = await runChat(prep);
+    const { t, reply } = await runChat(prep, progressSink(chatId));
     setTg({ threads: { ...tg().threads, [char]: t.id } });
     const c = allChars()[char];
     await say(chatId, `${c ? `${c.name}：` : ''}${reply || '（没有文字回复）'}`);
@@ -89,6 +116,8 @@ export function createTelegram({ loadSettings, saveSettings, prepareChat, runCha
       await say(chatId, `🛡 要发送吗？\n${a.platform} · 发给 ${a.recipient}\n\n${a.text}`,
         { reply_markup: { inline_keyboard: [[{ text: '取消', callback_data: `appr:${a.id}:0` }, { text: '发送', callback_data: `appr:${a.id}:1` }]] } }).catch(() => {});
     },
+    // Push a notice (e.g. a scheduled task's result) to the paired phone, if any.
+    async push(text) { const chatId = tg().chatId; if (chatId && tg().token && tg().enabled !== false) await say(chatId, text).catch(() => {}); },
     async test() { const me = await api('getMe'); return me.username; },
     stop() { stop = true; },
   };
