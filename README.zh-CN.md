@@ -42,7 +42,7 @@ Power 通过每个 Agent 自己的官方命令行来驱动它，和你在终端�
 
 ## Windows 预览版
 
-下载和使用方法见 [Windows 说明](docs/windows.md)。下载包自带 Node 和 Electron，解压后双击 `Power.cmd`。朋友需要自行安装并登录 Agent CLI。
+下载和使用方法见 [Windows 说明](docs/windows.md)。下载包自带 Node 和 Electron，运行 `Power-Setup-x64.exe` 安装，再从开始菜单打开 Power。朋友需要自行安装并登录 Agent CLI。
 
 ## 安装
 

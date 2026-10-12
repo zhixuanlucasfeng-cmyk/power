@@ -39,7 +39,7 @@ Power drives each agent through its own official CLI, the same way you would in 
 
 ## Windows preview
 
-Download and setup: [Power for Windows](docs/windows.md). The Windows package includes Node and Electron; extract it and run `Power.cmd`. Your friend must install and sign in to their own agent CLI.
+Download and setup: [Power for Windows](docs/windows.md). The Windows package includes Node and Electron; run `Power-Setup-x64.exe`, then open Power from the Start menu. Your friend must install and sign in to their own agent CLI.
 
 ## Install
 
