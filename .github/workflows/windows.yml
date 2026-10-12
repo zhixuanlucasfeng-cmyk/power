@@ -1,0 +1,27 @@
+name: Windows build
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - name: Test desktop and shared browser tabs
+        run: node --test desktop.test.mjs desktop-browser.test.mjs
+        env:
+          POWER_TEST_DESKTOP: '1'
+      - run: npm run windows:build
+      - name: Package Windows download
+        run: Compress-Archive -Path dist/Power-Windows-x64 -DestinationPath dist/Power-Windows-x64.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Power-Windows-x64
+          path: dist/Power-Windows-x64.zip

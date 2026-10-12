@@ -1,9 +1,12 @@
 import { readFileSync, mkdirSync, copyFileSync, readdirSync, statSync, realpathSync } from 'node:fs';
 import { join, extname, relative } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { spawn, execFile } from 'node:child_process';
-import { promisify } from 'node:util';
-const exec = promisify(execFile);
+import spawn from 'cross-spawn';
+const exec = (bin,args,options) => new Promise((resolve,reject)=>{
+  const child=spawn(bin,args,{...options,stdio:['ignore','pipe','pipe']});let stdout='',stderr='';
+  child.stdout.on('data',b=>stdout+=b);child.stderr.on('data',b=>stderr+=b);
+  child.once('error',reject);child.once('close',code=>code===0?resolve({stdout,stderr}):reject(new Error(stderr||'Command failed')));
+});
 export function imageExtension(buffer) {
   if (buffer.subarray(0, 8).equals(Buffer.from([137,80,78,71,13,10,26,10]))) return 'png';
   if (buffer[0] === 255 && buffer[1] === 216 && buffer[2] === 255) return 'jpg';

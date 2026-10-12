@@ -163,11 +163,11 @@ function isExec(p) { try { accessSync(p, constants.X_OK); return true; } catch {
 
 function which(a) {
   const dirs = [...(process.env.PATH ?? '').split(delimiter), ...EXTRA_DIRS].filter(Boolean);
-  return a.prefer?.find(isExec) ?? a.bins.flatMap((b) => dirs.map((d) => join(d, b))).find(isExec);
+  return a.prefer?.find(isExec) ?? a.bins.flatMap((b) => dirs.flatMap((d) => (process.platform === 'win32' ? ['.exe','.cmd','.bat',''] : ['']).map(ext => join(d, b + ext)))).find(isExec);
 }
 
 // A command name on PATH, or an absolute path to an executable.
-export const findBin = (name) => (name.includes('/') ? (isExec(name) ? name : undefined) : which({ bins: [name] }));
+export const findBin = (name) => ((/[\\/]/.test(name)) ? (isExec(name) ? name : undefined) : which({ bins: [name] }));
 
 // → [{ engine, label, path, model? }] for every supported agent installed on this machine.
 // Per-engine model menus for the UI: { engine: [{ id, label, efforts }] }.

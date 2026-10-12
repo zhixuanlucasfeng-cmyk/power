@@ -40,6 +40,10 @@
 
 Power 通过每个 Agent 自己的官方命令行来驱动它，和你在终端里用没有区别。它不会读取、复制或转用任何人的凭证或订阅。
 
+## Windows 预览版
+
+下载和使用方法见 [Windows 说明](docs/windows.md)。下载包自带 Node 和 Electron，解压后双击 `Power.cmd`。朋友需要自行安装并登录 Agent CLI。
+
 ## 安装
 
 ```sh

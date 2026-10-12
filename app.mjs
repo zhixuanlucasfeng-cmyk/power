@@ -1,7 +1,7 @@
 // Power: one app for every AI agent on this machine. Drives each agent's own CLI headless
 // (Claude Code with your own subscription login, Codex, opencode, Hermes, ...). Binds to 127.0.0.1 only.
 import { createServer } from 'node:http';
-import { spawn } from 'node:child_process';
+import spawn from 'cross-spawn';
 import { readFileSync, writeFileSync, readdirSync, mkdirSync, existsSync, unlinkSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { homedir } from 'node:os';
@@ -256,7 +256,7 @@ function runTurn(t, c, { prompt, session, model, effort, ask, files, character }
     const out = (e) => { if (e.t === 'done') done = true; emit(e); };
     const toolSession = agentTools.start({ thread: t.id, char: character ?? t.char, dir, parent:t.parent });
     const child = spawn(bin, cmd.args, { cwd: cmd.cwd ?? dir, detached: process.platform !== 'win32', env: { ...process.env, POWER_HOME: HOME, POWER_PORT: String(PORT), POWER_THREAD: t.id, POWER_TOOL_TOKEN: toolSession.token, MCP_TOOL_TIMEOUT: '1200000', ...(codexTools?.env ?? {}) }, stdio: ['ignore', 'pipe', 'pipe'] });
-    const terminate = (signal) => { try { if (child.pid && process.platform !== 'win32') process.kill(-child.pid, signal); else child.kill(signal); } catch {} };
+    const terminate = (signal) => { try { if (child.pid && process.platform !== 'win32') process.kill(-child.pid, signal); else if(child.pid) spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], {stdio:'ignore'}).on('error',()=>child.kill()); } catch {} };
     const active = running.get(t.id);
     if (active) active.cancelTools = toolSession.close;
     hold({ kill: terminate });
@@ -670,7 +670,7 @@ createServer(async (req, res) => {
       saveSettings(st);
       return json(res, 200, { key });
     }
-    if (p === '/api/open-data' && req.method === 'POST') { spawn('open', [HOME]); return json(res, 200, {}); }
+    if (p === '/api/open-data' && req.method === 'POST') { spawn(process.platform === 'win32' ? 'explorer.exe' : process.platform === 'darwin' ? 'open' : 'xdg-open', [HOME]); return json(res, 200, {}); }
     if (p === '/api/contract') {
       // What the crew can call through the Contract gateway, and how many credits are left. The key stays here.
       const k = contractOf();
@@ -729,7 +729,7 @@ createServer(async (req, res) => {
     if (p === '/api/telegram') { const t = loadSettings().telegram ?? {}; return json(res, 200, { hasToken: !!t.token, paired: !!t.chatId, char: t.char ?? '', enabled: t.enabled !== false, pairCode: t.pairCode ?? null }); }
     if (p === '/api/open-vault' && req.method === 'POST') {
       const v = vaultOf(); if (!v) return json(res, 400, { error: '还没设置 Obsidian 库' });
-      spawn('open', [`obsidian://open?path=${encodeURIComponent(join(v, 'Power'))}`]); return json(res, 200, {});
+      spawn(process.platform === 'win32' ? 'explorer.exe' : process.platform === 'darwin' ? 'open' : 'xdg-open', [`obsidian://open?path=${encodeURIComponent(join(v, 'Power'))}`]); return json(res, 200, {});
     }
     if (p === '/api/clear-chats' && req.method === 'POST') {
       for (const f of readdirSync(THREADS)) if (f.endsWith('.json') && !running.has(f.slice(0, -5))) unlinkSync(join(THREADS, f));
@@ -777,7 +777,7 @@ createServer(async (req, res) => {
     if (p === '/api/open-folder' && req.method === 'POST') {
       const { id } = await readBody(req);
       const d = ID_RE.test(id ?? '') && existsSync(threadFile(id)) ? loadThread(id).dir : null;
-      if (d && existsSync(d)) spawn('open', [d]);
+      if (d && existsSync(d)) spawn(process.platform === 'win32' ? 'explorer.exe' : process.platform === 'darwin' ? 'open' : 'xdg-open', [d]);
       return json(res, 200, {});
     }
     if (p.startsWith('/api/markdown/')) {

@@ -37,6 +37,10 @@
 
 Power drives each agent through its own official CLI, the same way you would in a terminal. It never reads, copies or forwards anyone's credentials or subscription.
 
+## Windows preview
+
+Download and setup: [Power for Windows](docs/windows.md). The Windows package includes Node and Electron; extract it and run `Power.cmd`. Your friend must install and sign in to their own agent CLI.
+
 ## Install
 
 ```sh

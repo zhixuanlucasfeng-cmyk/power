@@ -8,7 +8,9 @@
     "browser:install": "playwright-core install chromium",
     "desktop:build": "node desktop/build.mjs",
     "desktop:start": "electron desktop/main.cjs",
-    "test:desktop": "POWER_TEST_DESKTOP=1 node --test desktop-browser.test.mjs"
+    "test:desktop": "POWER_TEST_DESKTOP=1 node --test desktop-browser.test.mjs",
+    "windows:build": "node desktop/build-windows.mjs",
+    "start": "node desktop/launch.mjs"
   },
   "keywords": [
     "claude-code",
@@ -29,6 +31,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.1",
     "@playwright/mcp": "0.0.83",
+    "cross-spawn": "^7.0.6",
     "fast-xml-parser": "^5.11.2",
     "jszip": "^3.10.2",
     "zod": "^4.6.5"
