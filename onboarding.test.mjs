@@ -2,8 +2,8 @@ import {test} from 'node:test';import assert from 'node:assert/strict';import {E
 test('setup only completes a real verified login, supports failure and cancellation, and installs fixed official package',async()=>{
  const home=mkdtempSync(join(tmpdir(),'power-setup-'));let installed=false,auth=false,fail=false,hang=false;const calls=[];
  const run=(bin,args)=>{calls.push({bin,args});const p=new EventEmitter();p.stdout=new EventEmitter();p.stderr=new EventEmitter();p.kill=()=>p.emit('close',1);
- setImmediate(()=>{if(hang)return;let output='',code=0;if(args.includes('status')){code=auth?0:1;output=auth?'Logged in using ChatGPT':'Not logged in';}else if(args.includes('install'))installed=true;else if(args.includes('--device-auth'))auth=true;else{code=fail?1:0;output=fail?'Connection failed':'POWER_READY';}p.stdout.emit('data',Buffer.from(output));p.emit('close',code);});return p;};
- const setup=createOnboarding({home,root:home,find:n=>n==='npm'?'/npm':installed?'/codex':undefined,run});const settle=()=>new Promise(r=>setTimeout(r,20));
+ setImmediate(()=>{if(hang)return;let output='',code=0;if(args.includes('status')){code=auth?0:1;output=auth?'Logged in using ChatGPT':'Not logged in';}else if(args.includes('install'))installed=true;else if(args.includes('--device-auth'))auth=true;else{code=fail?1:0;output=fail?'Connection failed':JSON.stringify({type:'item.completed',item:{type:'agent_message',text:'POWER_READY'}});}p.stdout.emit('data',Buffer.from(output));p.emit('close',code);});return p;};
+ const setup=createOnboarding({home,root:home,find:n=>n==='npm'?'/npm':installed?'/codex':undefined,run});const settle=()=>new Promise(r=>setImmediate(r));
  try{
  assert.equal((await setup.status()).installed,false);await assert.rejects(setup.start('anything'));await assert.rejects(setup.start('verify'));
  await setup.start('install');await settle();assert.ok(calls.at(-1).args.includes('@openai/codex'));assert.equal((await setup.status()).installed,true);
