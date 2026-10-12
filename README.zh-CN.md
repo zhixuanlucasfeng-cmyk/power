@@ -8,7 +8,10 @@
 
 ## 能做什么
 
-- **自动找到本机所有 Agent：** 启动时扫描 Claude Code、Codex、opencode、Hermes、pi、Gemini CLI、Qwen Code、Cursor Agent、Copilot CLI、Auggie、Amp、Goose、Crush、Aider、OpenClaw，以及每个本地 Ollama 模型。找到就出现在侧边栏，直接能用。其他"收一句话、打印回答"的命令行工具，可以在设置里手动加。
+- **可见浏览器和登录接管：** Codex / Claude 可打开网页、查看页面、填写表单、操作标签页、上传下载和截图。桌面 App 的右侧内嵌真实浏览器，支持「+」新标签页；登录后点「交还 Agent」，如有登录确认卡片再回答。桌面浏览器登录状态保存在 `~/.power/desktop`。
+- **任务交互与结果：** Agent 可以提出带选项的问题、显示任务清单、展示生成文件，以及通过对话管理定时任务。具体支持范围和安装说明见 [能力对照](docs/capabilities.md)。
+
+- **自动找到本机所有 Agent：** 启动时扫描 Claude Code、Codex、opencode、Hermes、pi、Gemini CLI、Qwen Code、Cursor Agent、Copilot CLI、Auggie、Amp、Goose、Crush、Aider、OpenClaw。找到就出现在侧边栏，直接能用。其他"收一句话、打印回答"的命令行工具，可以在设置里手动加。
 - **群聊：** 选 2–8 个 Agent、讨论 1–3 轮。每个人都看得到别人说了什么，可以接着说，也可以反驳；最后由第一个选的人给出最终答案。
 - **有性格的小队：** Claude Code 角色来自"角色包"，每个角色有自己的说话风格、默认模型（Haiku / Sonnet / Opus）和思考深度。可以换角色包，也可以用 JSON 自己写一个。
 - **像 Codex 一样按项目管理：** 每个角色有自己的项目文件夹，对话归在它运行时所在的文件夹下，Agent 也直接在那里读写文件。
@@ -30,8 +33,8 @@
 
 ## 环境要求
 
-- macOS 14+。App 本身只是一个 Swift/WebKit 外壳，服务端是普通的 Node，在 Linux 上也能用浏览器打开。
-- Node.js 22.5+
+- macOS 14+。App 使用 Electron，右侧内嵌 Chromium；服务端是 Node，在 Linux 上也能用网页界面。
+- Node.js 22.19+
 - [Claude Code](https://claude.com/claude-code)，用你自己的账号登录（内置小队要用）。
 - 其他想用的 Agent 命令行工具，各自用各自的方式登录。
 
@@ -42,6 +45,7 @@ Power 通过每个 Agent 自己的官方命令行来驱动它，和你在终端�
 ```sh
 git clone https://github.com/zhixuanlucasfeng-cmyk/power && cd power
 npm install
+mkdir -p ~/.local/bin
 ln -sf "$PWD/power" ~/.local/bin/power   # 把 power 命令加到 PATH
 power service ensure                     # 让后台服务常驻（launchd）
 power app                                # 第一次会编译 ~/Applications/Power.app 并打开
@@ -49,7 +53,7 @@ power app                                # 第一次会编译 ~/Applications/Pow
 
 不想用 Mac App 的话：运行 `node app.mjs`，然后打开 <http://127.0.0.1:4545>。
 
-App 一直显示“服务还在启动”？运行 `power service restart`（看原因用 `power service log`）。拉取更新后用 `mac/build.sh` 重新编译 App。
+App 一直显示“服务还在启动”？运行 `power service restart`（看原因用 `power service log`）。拉取更新后用 `npm run desktop:build` 重新编译 App。
 
 ## 设置
 
@@ -58,7 +62,7 @@ App 一直显示“服务还在启动”？运行 `power service restart`（看�
 - **你的称呼：** 角色们怎么叫你。
 - **✏️ 人设：** 改任意角色的人设 prompt（身份、说话方式、对你的态度、负责什么），也可以恢复角色包原文。
 - **群聊团队规则：** 谁主导哪类问题、其他人怎么补充。
-- **Agent：** 每个检测到的 Agent 都可以单独开关、挪到任意分组（也可以新建分组），也可以重新扫描、一键隐藏本地模型、添加自定义命令行工具。
+- **Agent：** 每个检测到的 Agent 都可以单独开关、挪到任意分组（也可以新建分组），也可以重新扫描、添加自定义命令行工具。
 - **Obsidian 库：** 记忆存在 `<库>/Power/记忆本/`。
 - **其他：** 默认工作文件夹、发送键等。
 
@@ -85,9 +89,15 @@ Claude 角色遵守 `~/.power/CLAUDE.md` 里的红线（这个文件由 `persona
 ```sh
 npm test            # 记忆、各家输出解析，以及用假 Agent 跑的端到端对话测试（单聊、群聊、@、超时、附件、确认卡片）
 node app.mjs        # http://127.0.0.1:4545
-mac/build.sh        # 改了 mac/PowerApp.swift 之后重新编译 App
+npm run desktop:build        # 构建 Electron 桌面 App
 ```
 
 ## 许可
 
 MIT。`personas/chainsaw-man.json` 是同人示例，引用了《电锯人》（© 藤本树 / 集英社）的角色名，不含任何图片。它与版权方无关，也未获其认可，可以直接删除。
+
+## 工作台
+
+聊天顶部「工作台」提供文件和交互 HTML 预览、通过已登录 Codex CLI 使用 ChatGPT 订阅生成/编辑图片、Git 差异及本地评论、隔离工作树并行任务和支持 OAuth 的 MCP 连接器。已移除 Ollama 自动发现及适配器。详见[能力及限制](docs/capabilities.md)。
+
+新版 Power.app 的右侧是真正的 Chromium 浏览器，可直接点击、输入、滚动、选择文字和登录；Agent 使用同一组标签页。运行 `npm run desktop:build` 构建、`./power app` 打开。普通网页入口保留旧的浏览器兼容界面。

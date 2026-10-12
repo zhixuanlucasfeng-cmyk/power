@@ -8,7 +8,7 @@
 
 ## What it does
 
-- **Finds every agent on your machine.** On launch Power scans for Claude Code, Codex, opencode, Hermes, pi, Gemini CLI, Qwen Code, Cursor Agent, Copilot CLI, Auggie, Amp, Goose, Crush, Aider, OpenClaw, and each local Ollama model. They show up in the sidebar, ready to use. Anything else that takes a prompt and prints a reply can be added in Settings.
+- **Finds every agent on your machine.** On launch Power scans for Claude Code, Codex, opencode, Hermes, pi, Gemini CLI, Qwen Code, Cursor Agent, Copilot CLI, Auggie, Amp, Goose, Crush, Aider, OpenClaw. They show up in the sidebar, ready to use. Anything else that takes a prompt and prints a reply can be added in Settings.
 - **Group chat.** Pick 2–8 agents and 1–3 rounds of discussion. Each one sees what the others said, builds on it or pushes back, and the first member writes the final answer.
 - **A crew with personalities.** Claude Code characters come from a *persona pack*: each has its own voice, default model (Haiku / Sonnet / Opus) and thinking depth. Swap packs or write your own in JSON.
 - **Codex-style projects.** Every character keeps its own project folders; chats live under the folder they ran in, and agents read and write files there.
@@ -30,8 +30,8 @@
 
 ## Requirements
 
-- macOS 14+ (the app is a small Swift/WebKit shell; the server is plain Node and also runs in a browser on Linux)
-- Node.js 22.5+
+- macOS 14+ (the Electron app embeds Chromium; the Node server also runs through the web interface on Linux)
+- Node.js 22.19+
 - [Claude Code](https://claude.com/claude-code), signed in with your own account, for the built-in crew
 - Any other agent CLIs you want to use, each signed in its own way
 
@@ -42,6 +42,7 @@ Power drives each agent through its own official CLI, the same way you would in 
 ```sh
 git clone https://github.com/zhixuanlucasfeng-cmyk/power && cd power
 npm install
+mkdir -p ~/.local/bin
 ln -sf "$PWD/power" ~/.local/bin/power   # puts the `power` command on your PATH
 power service ensure                     # keep the server running in the background (launchd)
 power app                                # builds ~/Applications/Power.app on first run and opens it
@@ -49,7 +50,7 @@ power app                                # builds ~/Applications/Power.app on fi
 
 No Mac app? Run `node app.mjs` and open <http://127.0.0.1:4545>.
 
-App stuck on "server is starting"? Run `power service restart` (or `power service log` to see why). After pulling updates, rebuild the app with `mac/build.sh`.
+App stuck on "server is starting"? Run `power service restart` (or `power service log` to see why). After pulling updates, rebuild the app with `npm run desktop:build`.
 
 ## Configure
 
@@ -59,7 +60,7 @@ Everything lives in **⚙️ Settings**:
 - **Your name:** what the crew calls you.
 - **✏️ Persona:** rewrite any character's prompt (voice, attitude, what they're in charge of), or restore the pack's original.
 - **Group-chat team rules:** who leads which kind of question and how the others chip in.
-- **Agents:** turn each detected agent on or off, move it to any group (or a new one), rescan, hide all local models, or add a custom CLI.
+- **Agents:** turn each detected agent on or off, move it to any group (or a new one), rescan, add a custom CLI.
 - **Obsidian vault:** memory notes go to `<vault>/Power/记忆本/`.
 - **Default folder, send key, and so on.**
 
@@ -102,7 +103,7 @@ By default, messages to other people are shown as drafts first. You can change t
 ## How it works
 
 ```
-Power.app (WKWebView) ──▶ app.mjs (local HTTP, 127.0.0.1 only)
+Power.app (Electron) ──▶ app.mjs (local HTTP, 127.0.0.1 only)
                              ├─ engines.mjs   detect agent CLIs, run one turn, parse their JSON streams
                              ├─ memory.mjs    Markdown facts + automatic recall + self-written skills
                              ├─ personas/     who's in the crew
@@ -116,9 +117,15 @@ Adding an agent means adding one entry to `ADAPTERS` in `engines.mjs`: the binar
 ```sh
 npm test            # memory, parsers, and end-to-end chats with fake agents (single, group, @, time limit, files, confirmations)
 node app.mjs        # http://127.0.0.1:4545
-mac/build.sh        # rebuild Power.app after changing mac/PowerApp.swift
+npm run desktop:build        # build the Electron desktop app
 ```
 
 ## License
 
 MIT. `personas/chainsaw-man.json` is a fan-made example that references characters from *Chainsaw Man* (© Tatsuki Fujimoto / Shueisha). It ships no artwork. It is not affiliated with or endorsed by the rights holders, and you can delete it.
+
+## Workspace tools
+
+The **工作台** button opens document and interactive HTML previews, ChatGPT subscription image generation through the signed-in Codex CLI, Git diffs and local review comments, isolated parallel jobs, and configurable MCP connectors with OAuth. See [capabilities and limits](docs/capabilities.md). Ollama discovery and its local-model adapter have been removed.
+
+Power.app includes a native Chromium browser beside chat. Build with `npm run desktop:build`; launch with `./power app`. Website logins persist in Power’s browser profile. The web-only interface retains the previous browser fallback.

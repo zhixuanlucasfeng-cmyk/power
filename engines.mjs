@@ -7,7 +7,6 @@
 import { accessSync, constants, readFileSync } from 'node:fs';
 import { join, delimiter } from 'node:path';
 import { homedir } from 'node:os';
-import { execFileSync } from 'node:child_process';
 
 const IMAGE = /\.(png|jpe?g|gif|webp)$/i;
 export const strip = (s) => String(s).replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '');
@@ -16,9 +15,18 @@ export const isCodexWriterConflict = (error) => /thread-store conflict|already h
 // Codex snapshots its MCP tool list when a thread starts. Resuming that thread can drop
 // Power's dynamically injected tools, so replay Power's transcript into a fresh turn.
 export const sessionForTurn = (engine, savedSession) => engine === 'codex' ? null : savedSession ?? null;
+export const historyPrompt = (lines, text) => {
+  const past = lines.slice(0, -1);
+  if (!past.length) return text;
+  const recent = past.slice(-12);
+  const objective = past[0];
+  const pinned = recent.includes(objective) ? '' : `Thread objective:\n${objective.slice(0, 6000)}\n\n`;
+  return `${pinned}Recent conversation:\n${recent.join('\n\n')}\n\nUser now says: ${text}`;
+};
 export const isCodexMissingPowerTool = (message) => {
   const s = String(message ?? '');
-  return /confirm_send/i.test(s) && /(not a function|not callable|not available|missing|doesn['’]?t have|没有|缺少|无法调用|不可调用)/i.test(s);
+  // "没有"/"missing" count only when they refer to the tool itself, not "我没有浏览".
+  return /confirm_send/i.test(s) && /(not a function|not callable|not available|doesn['’]?t have|缺少|无法调用|不可调用|(没有|missing)[^。.\n]{0,30}confirm_send|confirm_send[^。.\n]{0,30}missing)/i.test(s);
 };
 
 // claude -p --output-format stream-json --include-partial-messages
@@ -77,6 +85,10 @@ function parseCodex(ev, emit, st) {
   const it = ev.item ?? {};
   if (ev.type === 'thread.started') st.session = ev.thread_id;
   else if (ev.type === 'item.started' && it.type === 'command_execution') emit({ t: 'tool', id: it.id, name: 'Bash', input: { command: it.command } });
+  else if (ev.type === 'item.started' && it.type === 'mcp_tool_call') {
+    (st.mcpStarted ??= new Set()).add(it.id);
+    emit({ t: 'tool', id: it.id, name: it.tool || it.type, input: it.arguments ?? {} });
+  }
   else if (ev.type === 'item.started' && it.type === 'reasoning') emit({ t: 'thinking' });
   else if (ev.type === 'item.completed') {
     if (it.type === 'agent_message') { st.text = `${st.text ?? ''}\n${it.text ?? ''}`; emit({ t: 'text_start' }); emit({ t: 'text', d: it.text }); }
@@ -85,8 +97,10 @@ function parseCodex(ev, emit, st) {
       emit({ t: 'tool', id: it.id, name: 'Edit', input: { file_path: (it.changes ?? []).map((c) => `${c.kind} ${c.path}`).join(', ') } });
       emit({ t: 'tool_result', id: it.id, out: JSON.stringify(it.changes, null, 1), error: it.status === 'failed' });
     } else if (it.type === 'mcp_tool_call' || it.type === 'web_search') {
-      emit({ t: 'tool', id: it.id, name: it.tool || it.type, input: it.arguments ?? { query: it.query } });
-      emit({ t: 'tool_result', id: it.id, out: '', error: false });
+      if (!st.mcpStarted?.delete(it.id)) emit({ t: 'tool', id: it.id, name: it.tool || it.type, input: it.arguments ?? { query: it.query } });
+      const result = it.result;
+      const out = it.error?.message ?? (Array.isArray(result?.content) ? result.content.map((c) => c.text ?? `[${c.type}]`).join('\n') : JSON.stringify(result ?? it.action ?? ''));
+      emit({ t: 'tool_result', id: it.id, out: cut(out), error: !!it.error || !!result?.isError || it.status === 'failed' });
     }
   } else if (ev.type === 'turn.failed' || ev.type === 'error') st.error = String(ev.error?.message ?? ev.message).slice(0, 500);
 }
@@ -113,7 +127,7 @@ export const ADAPTERS = {
         ...Object.entries(o.mcp ?? {}).flatMap(([n, m]) => ['-c', `mcp_servers.${n}.command=${JSON.stringify(m.command)}`,
           '-c', `mcp_servers.${n}.args=${JSON.stringify(m.args ?? [])}`, ...(m.envVars?.length ? ['-c', `mcp_servers.${n}.env_vars=${JSON.stringify(m.envVars)}`] : []),
           // codex exec can't ask for approval, so tools we hand it are pre-approved (or they'd always be refused).
-          '-c', `mcp_servers.${n}.default_tools_approval_mode="approve"`])];
+          '-c', `mcp_servers.${n}.default_tools_approval_mode="approve"`, ...(m.toolTimeoutSec ? ['-c', `mcp_servers.${n}.tool_timeout_sec=${m.toolTimeoutSec}`] : [])])];
       return { parse: parseCodex, args: o.session
         ? ['exec', ...cfg, 'resume', o.session, '--json', '--skip-git-repo-check', ...pick, ...imgs, o.prompt]
         : ['exec', ...cfg, '--json', '--skip-git-repo-check', '-s', 'workspace-write', '-C', o.dir, ...pick, ...imgs, o.prompt] };
@@ -139,10 +153,7 @@ export const ADAPTERS = {
     if (!toks.some((t) => t.includes('{prompt}'))) toks.push('{prompt}');
     return { args: toks.map((t) => t.replaceAll('{prompt}', o.prompt).replaceAll('{dir}', o.dir)) };
   } },
-  // Every local Ollama model becomes its own agent (plain chat, no tools).
-  ollama: { label: 'Ollama', bins: ['ollama'],
-    models: (bin) => execFileSync(bin, ['list'], { timeout: 4000, encoding: 'utf8' }).split('\n').slice(1).map((l) => l.split(/\s+/)[0]).filter((m) => m && !/:[0-9a-f]{32,}$/.test(m)).filter((m, i, all) => all.indexOf(m) === i).slice(0, 8),
-    run: (o) => ({ args: ['run', o.model, '--hidethinking', '--nowordwrap', o.prompt] }) },
+
 };
 
 const EXTRA_DIRS = ['.local/bin', '.bun/bin', '.cargo/bin', '.npm-global/bin', '.deno/bin'].map((d) => join(homedir(), d))

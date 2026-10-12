@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Power</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Zen+Kaku+Gothic+New:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Zen+Kaku+Gothic+New:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
 <style>
   /* Typhoon night, neon cafe, festival fireworks: a Reze-arc mood. */
   :root {
@@ -214,6 +214,41 @@
   .card b { display:block; } .card small { color:var(--dim); font-size:12px; }
 
   @media (max-width: 1000px) { body, body.memopen, body.pactopen { grid-template-columns:1fr; } aside, #mem, #pact, body.memopen #mem, body.pactopen #pact { display:none; } }
+  #browserpanel { display:none; position:relative; z-index:2; min-width:0; min-height:0; background:#101323; border-left:1px solid var(--line); flex-direction:column; }
+  body.browseropen { grid-template-columns:240px minmax(320px,1fr) minmax(420px,46vw); }
+  body.browseropen #browserpanel { display:flex; }
+  body.browseropen #mem, body.browseropen #pact { display:none; }
+  .browserbar { display:flex; align-items:center; gap:6px; padding:10px; flex-wrap:wrap; border-bottom:1px solid var(--line); }
+  .browserbar input { flex:1; min-width:100px; background:#080b16; color:var(--text); border:1px solid var(--line); border-radius:7px; padding:8px; }
+  #bstatus, #bnotice { padding:8px 12px; font-size:12px; color:var(--dim); }
+  #bnotice { color:#ffd69a; background:#57381355; }
+  #btabbar { display:flex; align-items:center; min-width:0; }
+  #bnew { flex:none; width:32px; height:32px; margin:6px; font-size:22px; line-height:1; }
+  #btabs { flex:1; min-width:0; display:flex; gap:4px; overflow:auto; padding:6px; }
+  #btabs button { max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  #btabs button.active { border-color:var(--violet); }
+  #bviewport { flex:1; overflow:auto; background:#080a12; position:relative; }
+  #bimage { display:block; width:100%; cursor:default; }
+  #browserpanel [hidden] { display:none; }
+  #binput { position:absolute; opacity:0; width:1px; height:1px; top:0; left:0; pointer-events:none; }
+  #bempty { padding:36px 20px; color:var(--dim); }
+  @media(max-width:1100px) { body.browseropen { grid-template-columns:minmax(320px,1fr) minmax(360px,1fr); } body.browseropen aside { display:none; } }
+  @media(max-width:700px) { body.browseropen { grid-template-columns:1fr; } body.browseropen main { display:none; } }
+  #workbench {display:none;position:relative;z-index:3;min-height:0;min-width:0;background:#101323;border-left:1px solid var(--line);flex-direction:column;}
+  body.workspaceopen {grid-template-columns:220px minmax(300px,1fr) minmax(480px,50vw);}
+  body.workspaceopen #workbench {display:flex;}
+  body.workspaceopen #browserpanel,body.workspaceopen #mem,body.workspaceopen #pact {display:none;}
+  .wbhead,#wbnav,.wbrow {display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+  .wbhead {padding:12px;border-bottom:1px solid var(--line);}.wbhead b{flex:1}
+  #wbnav {padding:10px;}#wbnav .active {border-color:var(--violet);color:white;}
+  #wbstatus {padding:0 16px;color:#ffcc9b;font-size:13px;overflow-wrap:anywhere;}
+  #wbbody {flex:1;overflow:auto;padding:16px;min-height:0;}
+  #workbench label {display:block;margin:12px 0;}#workbench input:not([type=checkbox]),#workbench textarea,#workbench select{background:#090b16;color:var(--text);border:1px solid var(--line);padding:9px;border-radius:8px;font:inherit;max-width:100%;}#workbench label>input:not([type=checkbox]),#workbench label>textarea{display:block;width:100%;margin-top:5px}#workbench textarea{width:100%;min-height:70px;resize:vertical}#workbench input[type=checkbox]{width:auto;}
+  #workbench article{padding:14px;border:1px solid var(--line);border-radius:10px;margin:12px 0;overflow-wrap:anywhere}#workbench small{display:block;color:var(--dim);margin:5px 0}#workbench pre{white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.6 var(--mono)}.wbfile{display:block;text-align:left;width:100%;margin:8px 0}.wbbutton{display:inline-block;border:1px solid var(--line);padding:8px;cursor:pointer}.wbthumb{max-width:100%;max-height:340px}
+  #wbpreview{height:calc(100% - 65px);min-height:400px;margin-top:14px}#wbpreview iframe{width:100%;height:100%;min-height:400px;background:white;border:0;border-radius:8px}#wbpreview img,#wbpreview video{max-width:100%}#wbpreview #wbedit{height:100%;font:13px/1.6 var(--mono)}#workbench [hidden]{display:none!important;}
+  #wbdiff{overflow:auto;border:1px solid var(--line);margin:14px 0}.wbdiff{display:flex;min-width:max-content;font:12px/1.7 var(--mono)}.wbdiff code{white-space:pre}.wbdiff.add{background:#133321}.wbdiff.del{background:#401d29}.wbdiff button,.wblineno{display:inline-block;width:45px;flex-shrink:0;border:0;padding:0;font:inherit;border-radius:0;color:#999}.wbdiff button{cursor:pointer}
+  @media(max-width:1200px){body.workspaceopen{grid-template-columns:minmax(300px,1fr) minmax(420px,1fr)}body.workspaceopen aside{display:none}}
+  @media(max-width:760px){body.workspaceopen{grid-template-columns:1fr}body.workspaceopen main{display:none}}
 </style>
 </head>
 <body>
@@ -234,12 +269,14 @@
         <option value="low">思考 · 低</option><option value="medium">思考 · 中</option>
         <option value="high">思考 · 高</option><option value="xhigh">思考 · 很高</option><option value="max">思考 · 最大</option>
       </select>
+      <button id="browsert" title="打开右侧浏览器">🌐 浏览器</button>
       <button id="memt" title="打开 / 收起记忆本">🧠 记忆本</button>
       <button id="pactt" title="恶魔契约：Contract 工具网关">📜 契约</button>
     </div>
   </header>
   <div id="chat"></div>
   <div id="approvals"></div>
+  <div id="questions" style="padding:0 max(20px, calc(50% - 400px));max-height:40vh;overflow:auto"></div>
   <div id="composer">
     <div id="mchips"></div>
     <div id="files"></div>
@@ -252,6 +289,14 @@
     <div class="hint" id="hint"></div>
   </div>
 </main>
+<section id="browserpanel" aria-label="Power 浏览器">
+  <div class="browserbar"><b style="flex:1">浏览器</b><button id="btake">手动接管</button><button id="bnative">独立窗口</button><button id="bclose" aria-label="收起浏览器">✕</button></div>
+  <div class="browserbar"><select id="bmode" aria-label="浏览器连接"><option value="managed">Power 独立浏览器</option><option value="extension">我的 Chrome · 已有登录</option></select><button id="bconnect">连接</button><button id="bdisconnect">断开</button><a href="https://chromewebstore.google.com/detail/playwright-extension/mmlmfjhmonkocbjadbfplnigmagldckm" target="_blank" rel="noopener">安装 Chrome 扩展</a></div>
+  <form class="browserbar" id="bnav"><button type="button" id="bback" aria-label="后退">←</button><button type="button" id="breload" aria-label="刷新">↻</button><input id="burl" aria-label="网页地址" placeholder="输入网址" autocomplete="off"><button>前往</button></form>
+  <div id="btabbar"><div id="btabs"></div><button id="bnew" type="button" aria-label="New tab" title="新标签页 / New tab">+</button></div><div id="bstatus" role="status">正在连接浏览器…</div>
+  <div id="bnotice" hidden>网站拒绝了此次访问。可以手动接管检查页面，或在独立窗口操作。若仍被拦截，请联系网站并提供页面上的 Incident ID；切换面板不能解除网站限制。</div>
+  <div id="bviewport"><div id="bempty">打开网页后，画面会显示在这里。</div><img id="bimage" alt="当前浏览器页面实时画面" hidden><textarea id="binput" aria-label="输入到浏览器网页" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"></textarea></div>
+</section>
 <section id="mem">
   <div class="sec" style="padding-top:20px">记忆本</div>
   <input id="q" placeholder="搜索它记得的事…">
@@ -323,8 +368,17 @@ function render(e) {
   else if (e.t === 'routed') chat.insertAdjacentHTML('beforeend', `<div class="meta routed">→ ${esc(nm(e.lead))} 主答${e.helpers?.length ? `，${e.helpers.map(nm).map(esc).join('、')} 补充` : ''}</div>`);
   else if (e.t === 'approval') chat.insertAdjacentHTML('beforeend', `<div class="meta">🛡 请求确认：发给 ${esc(e.recipient)}（${esc(e.platform)}）</div>`);
   else if (e.t === 'approval_done') chat.insertAdjacentHTML('beforeend', `<div class="meta">${e.approved ? '✅ 你同意了发送' : '⛔ 没有发送'}</div>`);
+  else if (e.t === 'input_request') chat.insertAdjacentHTML('beforeend', `<div class="meta">🙋 ${esc(e.question)}</div>`);
+  else if (e.t === 'input_done') chat.insertAdjacentHTML('beforeend', `<div class="meta">${e.cancelled ? '已取消' : '你回答：' + esc(e.answer)}</div>`);
   else if (!turn) return;
-  else if (e.t === 'text' || e.t === 'text_start') {
+  else if (e.t === 'plan') {
+    turn.querySelector('.taskplan')?.remove();
+    turn.insertAdjacentHTML('beforeend', `<div class="taskplan appr">${e.steps.map((s) => `<div>${{ pending:'○', in_progress:'◉', completed:'✓' }[s.status] || '○'} ${esc(s.step)}</div>`).join('')}</div>`);
+  } else if (e.t === 'artifact') {
+    if (!/^\/upload\/[a-zA-Z0-9%_.-]+$/.test(e.url)) return;
+    turn.insertAdjacentHTML('beforeend', `<div class="appr"><button data-preview="${esc(decodeURIComponent(e.url.split('/').pop()))}">打开预览</button> <a href="${esc(e.url)}" target="_blank" rel="noopener" download>${esc(e.title)}</a>${e.image ? `<a href="${esc(e.url)}" target="_blank" rel="noopener"><img src="${esc(e.url)}" alt="${esc(e.title)}" style="display:block;max-width:100%;max-height:400px;margin-top:8px"></a>` : ''}</div>`);
+  } else if(e.t==='job'){const row=document.createElement('div');row.className='meta';row.textContent=`并行任务：${e.title} · ${e.status}`;turn.append(row);
+  } else if (e.t === 'text' || e.t === 'text_start') {
     turn.querySelector('.think')?.remove();
     const last = turn.lastElementChild;
     if (e.t === 'text' && last?.classList.contains('text')) { last._raw += e.d; last.innerHTML = md(last._raw); }
@@ -406,17 +460,17 @@ function renderTree() {
   // (公安 / 校园 / …) is a tag under each name. Archived chats are hidden (⚙️ 设置 → 数据).
   const live = THREADS.filter((t) => !t.archived);
   const last = {}, unreadBy = {};
-  for (const t of live) if (t.char) { if (!(last[t.char] > t.updated)) last[t.char] = t.updated; if (t.unread && t.id !== cur) unreadBy[t.char] = true; }
-  const dotU = (on) => (on ? '<i class="unread" title="未读"></i>' : '');
+  for (const t of live) if (t.char) { if (!(last[t.char] > t.updated)) last[t.char] = t.updated; if (t.unread) unreadBy[t.char] = true; }
+  const dotU = (on) => (on ? '<i class="unread" role="img" aria-label="完成 · 未读" title="完成 · 未读"></i>' : '');
   const pinned = live.filter((t) => t.pinned);
   const items = [
     ...live.filter((t) => t.members?.length > 1 && !t.pinned).map((t) => ({ kind: 'group', t, at: t.updated })),
     ...visible().map(([k, x]) => ({ kind: 'char', k, x, at: last[k] ?? '' })),
   ].sort((a, b) => b.at.localeCompare(a.at)); // stable: never-used characters keep the pack's order
   const groupRow = (t) => `<div class="ch grp ${t.id === cur ? 'on' : ''}" data-act="thread" data-id="${t.id}"><span class="stack">${t.members.slice(0, 3).map((m) => badge(m, true)).join('')}</span>` +
-    `<div class="who2"><b>${t.running ? '<span class="dot"></span>' : ''}${t.pinned ? '📌 ' : ''}${esc(t.title)}</b><small><span class="gtag">群聊</span> ${t.members.length} 人 · ${esc(t.members.map(nm).join('、'))}</small></div>${dotU(t.unread && t.id !== cur)}</div>`;
+    `<div class="who2"><b>${t.running ? '<span class="dot"></span>' : ''}${t.pinned ? '📌 ' : ''}${esc(t.title)}</b><small><span class="gtag">群聊</span> ${t.members.length} 人 · ${esc(t.members.map(nm).join('、'))}</small></div>${dotU(t.unread)}</div>`;
   const pinRow = (t) => t.members?.length > 1 ? groupRow(t)
-    : `<div class="ch ${t.id === cur ? 'on' : ''}" data-act="thread" data-id="${t.id}" style="--k:${look(t.char).k}">${badge(t.char, true)}<div class="who2"><b>${t.running ? '<span class="dot"></span>' : ''}📌 ${esc(t.title)}</b><small><span class="gtag">${esc(nm(t.char))}</span> ${esc(base(t.dir ?? '~'))}</small></div>${dotU(t.unread && t.id !== cur)}</div>`;
+    : `<div class="ch ${t.id === cur ? 'on' : ''}" data-act="thread" data-id="${t.id}" style="--k:${look(t.char).k}">${badge(t.char, true)}<div class="who2"><b>${t.running ? '<span class="dot"></span>' : ''}📌 ${esc(t.title)}</b><small><span class="gtag">${esc(nm(t.char))}</span> ${esc(base(t.dir ?? '~'))}</small></div>${dotU(t.unread)}</div>`;
   const head = `<div class="sec">聊天 <span><button class="mini" data-act="newgroup" title="新群聊">＋ 群聊</button> <button class="mini" data-act="rescan" title="重新扫描本机 Agent">🔍</button></span></div>`;
   $('#tree').innerHTML = (pinned.length ? `<div class="sec">置顶</div>` + pinned.map(pinRow).join('') : '') + head + items.map((it) => {
     if (it.kind === 'group') return groupRow(it.t);
@@ -428,7 +482,7 @@ function renderTree() {
       const here = k === char && d === dir;
       return `<div class="proj ${here && !cur ? 'on' : ''}" data-act="proj" data-k="${k}" data-d="${esc(d)}" title="${esc(short(d))}"><span>📁 ${esc(base(d))}</span>` +
         `<span class="acts"><i data-act="newin" title="新对话">＋</i>${short(d) === '~' ? '' : '<i data-act="rmproj" title="从列表移除（不删文件）">×</i>'}</span></div>` +
-        ts.map((t) => `<div class="th ${t.id === cur ? 'on' : ''}" data-act="thread" data-id="${t.id}">${t.running ? '<span class="dot"></span>' : ''}${t.pinned ? '📌 ' : ''}${esc(t.title)}${dotU(t.unread && t.id !== cur)}</div>`).join('');
+        ts.map((t) => `<div class="th ${t.id === cur ? 'on' : ''}" data-act="thread" data-id="${t.id}">${t.running ? '<span class="dot"></span>' : ''}${t.pinned ? '📌 ' : ''}${esc(t.title)}${dotU(t.unread)}</div>`).join('');
     }).join('');
     return row + `<div class="kids" style="--k:${look(k).k}">${projs}<div class="proj add" data-act="addproj" data-k="${k}">＋ 添加项目文件夹</div></div>`;
   }).join('');
@@ -500,6 +554,7 @@ function charMenu(k, x, y) {
 
 function pickFolder(cb) {
   folderCb = cb;
+  if(window.powerDesktop) {window.powerDesktop.invoke('pickFolder').then(d=>{if(d)window.powerFolder(d);});return;}
   if (window.webkit?.messageHandlers?.power) window.webkit.messageHandlers.power.postMessage('pickFolder');
   else { const p = prompt('项目文件夹（绝对路径）', dir || '~'); if (p) window.powerFolder(p); }
 }
@@ -580,7 +635,8 @@ function settingsPage() {
       <div class="srow"><div class="sinfo"><b>启动时打开记忆本</b></div><label class="sw"><input type="checkbox" data-set="memOpen" ${st.memOpen ? 'checked' : ''}><span></span></label></div>
     </div>
     <h2>Agent <small>本机检测到 ${META.agents.length} 个 · 关掉的不会出现在侧边栏和群聊里</small></h2>
-    <div class="sbar"><button id="srescan">🔍 重新扫描</button><button id="snolocal">隐藏所有本地模型</button><button id="sall">全部显示</button><button id="sgrpreset">恢复角色包的默认分组</button></div>
+    <div class="scard"><div class="srow"><div class="sinfo"><b>🌐 浏览器与任务工具</b><small>Claude / Codex：浏览网页、登录接管、提问、任务清单、文件展示和定时任务。其他有终端工具的 Agent 可用命令桥接。</small></div><button id="sbrowser">打开浏览器</button></div><div class="srow"><small>浏览器面板可选择独立浏览器，或通过 Chrome 扩展连接已有登录的标签页；发帖沿用发送确认设置。</small></div></div>
+    <div class="sbar"><button id="srescan">🔍 重新扫描</button><button id="sall">全部显示</button><button id="sgrpreset">恢复角色包的默认分组</button></div>
     ${Object.entries(byGroup).map(([g, list]) => `<div class="sgroup">${esc(g)}</div><div class="scard">${list.map(row).join('')}</div>`).join('')}
     <h2>⏰ 定时任务 <small>到点自动让某个角色做事，做完通知你</small></h2>
     <div class="scard" id="scheds"></div>
@@ -629,6 +685,16 @@ function settingsPage() {
   </div>`;
   fetch('/api/team').then((r) => r.json()).then((t) => { if ($('#steam')) $('#steam').value = t.team; });
   loadScheds(); loadTg();
+  $('#sbrowser').onclick = async (e) => {
+    const b = e.currentTarget; b.disabled = true; b.textContent = '正在打开…';
+    try {
+      await window.openPowerBrowser();
+      const r = { ok: true }, d = {};
+      if (!r.ok || d.isError) throw new Error(d.error || d.content?.map((c) => c.text || '').join('\n') || '浏览器启动失败');
+      b.textContent = '浏览器已打开';
+    } catch (err) { b.textContent = '打开浏览器'; alert(err.message); }
+    finally { b.disabled = false; }
+  };
   const c = $('#chat');
   c.onchange = async (e) => {
     const el = e.target;
@@ -667,7 +733,6 @@ function settingsPage() {
     else if (el.id === 'svaultx') { await saveSetting({ vault: null }); settingsPage(); loadMem(); }
     else if (el.id === 'sobs') { const r = await fetch('/api/open-vault', { method: 'POST' }); if (!r.ok) alert((await r.json()).error); }
     else if (el.id === 'srescan') { el.textContent = '扫描中…'; META = await (await fetch('/api/meta?rescan=1')).json(); await loadThreads(); settingsPage(); }
-    else if (el.id === 'snolocal') { await saveSetting({ hidden: [...new Set([...META.settings.hidden, ...keys.filter((k) => META.chars[k].engine === 'ollama')])] }); settingsPage(); }
     else if (el.id === 'sall') { await saveSetting({ hidden: [] }); settingsPage(); }
     else if (el.id === 'sgrpreset') { await saveSetting({ charGroups: {} }); settingsPage(); }
     else if (el.dataset.edit) {
@@ -793,17 +858,18 @@ $('#tree').onclick = async (e) => {
   else if (act === 'thread') {
     // Double-click a chat to rename it. Counted via e.detail because the first click re-renders the list.
     if (e.detail >= 2) renameThread(el.dataset.id);
-    else if (el.dataset.id !== cur) open(el.dataset.id);
+    else open(el.dataset.id);
   }
   else if (act === 'newgroup') groupPicker();
   else if (act === 'rescan') { el.textContent = '扫描中…'; META = await (await fetch('/api/meta?rescan=1')).json(); await loadThreads(); }
 };
 
-async function open(id) {
+async function open(id, markRead = true) {
   cur = id; setBusy(false); $('#chat').onclick = $('#chat').onchange = null;
-  if (THREADS.find((t) => t.id === id)?.unread) fetch('/api/thread-meta', { method: 'POST', body: JSON.stringify({ id, unread: false }) });
   const t = await (await fetch('/api/thread/' + id)).json();
+  if (cur !== id) return;
   $('#chat').innerHTML = ''; turn = null; t.events.forEach(render);
+  if (markRead && !document.hidden && document.hasFocus() && t.unread) await fetch('/api/thread-meta', { method: 'POST', body: JSON.stringify({ id, unread: false, seenUpdated: t.updated }) });
   if (t.members?.length > 1) { group = { members: t.members, rounds: 1, mode: t.mode ?? 'all' }; groupHeader(t.members, t.title); }
   else { group = null; const who = t.char || t.events.find((e) => e.t === 'user')?.char; if (who) { open_.add(who); pick(who); } }
   setDir(t.dir || dir);
@@ -815,7 +881,7 @@ async function poll(id) {
   while (cur === id) {
     await new Promise((r) => setTimeout(r, 1500));
     const t = await (await fetch('/api/thread/' + id)).json();
-    if (!t.running) { if (cur === id) open(id); return; }
+    if (!t.running) { if (cur === id) open(id, false); return; }
     if (cur === id && t.events.length !== seen) { seen = t.events.length; $('#chat').innerHTML = ''; turn = null; t.events.forEach(render); render({ t: 'thinking' }); }
   }
 }
@@ -852,6 +918,31 @@ async function pollApprovals() {
     const list = await (await fetch('/api/approvals')).json();
     $('#approvals').innerHTML = list.map((a) => `<div class="appr"><b>🛡 要发送吗？</b><div class="meta">${esc(a.platform)} · 发给 <b>${esc(a.recipient)}</b></div><pre>${esc(a.text)}</pre>
       <div class="row2"><button data-appr="${a.id}" data-ok="0">取消</button><button class="go" data-appr="${a.id}" data-ok="1">发送</button></div></div>`).join('');
+  } catch {}
+}
+async function pollQuestions() {
+  try {
+    const list = await (await fetch('/api/questions')).json(), box = $('#questions');
+    for (const el of [...box.children]) if (!list.some((q) => q.id === el.dataset.question)) el.remove();
+    for (const q of list) {
+      if ([...box.children].some((el) => el.dataset.question === q.id)) continue;
+      const card = document.createElement('div'); card.className = 'appr'; card.dataset.question = q.id;
+      const title = THREADS.find((t) => t.id === q.thread)?.title || q.thread;
+      card.innerHTML = `<b>${q.kind === 'login' ? '🌐 请在浏览器完成登录' : '🙋 需要你的回答'}</b><div class="meta">${esc(title)}</div><p>${esc(q.question)}</p><div class="row2" style="flex-wrap:wrap">${q.options.map((o, i) => `<button data-answer="${i}">${esc(o)}</button>`).join('')}<button data-cancel>取消</button></div>${q.kind === 'login' ? '<small>密码和验证码直接填在网站里。</small>' : '<textarea rows="2" placeholder="填写回答…" style="width:100%;margin-top:8px"></textarea><button data-submit>提交回答</button>'}<div class="err"></div>`;
+      card.onclick = async (e) => {
+        const b = e.target.closest('button'); if (!b) return;
+        const cancelled = b.hasAttribute('data-cancel');
+        const answer = b.hasAttribute('data-answer') ? q.options[Number(b.dataset.answer)] : card.querySelector('textarea')?.value.trim();
+        if (!cancelled && !answer) return;
+        b.disabled = true;
+        try {
+          const r = await fetch('/api/questions/' + q.id, { method: 'POST', body: JSON.stringify({ cancelled, answer }) });
+          const d = await r.json(); if (!r.ok) throw new Error(d.error);
+          card.remove();
+        } catch (err) { card.querySelector('.err').textContent = err.message; b.disabled = false; }
+      };
+      box.append(card);
+    }
   } catch {}
 }
 async function send() {
@@ -926,6 +1017,7 @@ function grow() { const t = $('#input'); t.style.height = 'auto'; t.style.height
   $('#memlist').onclick = async (e) => { const id = e.target.dataset?.id; if (!id) return; await fetch('/api/forget', { method: 'POST', body: JSON.stringify({ id }) }); loadMem(); };
   setInterval(loadThreads, 4000);
   setInterval(pollApprovals, 2000);
+  setInterval(pollQuestions, 1000); pollQuestions();
   translate(document.body); if (META.settings.language === 'en') document.documentElement.lang = 'en';
   $('#approvals').onclick = async (e) => { const b = e.target.closest('[data-appr]'); if (!b) return; b.disabled = true; await fetch('/api/approvals/' + b.dataset.appr, { method: 'POST', body: JSON.stringify({ approved: b.dataset.ok === '1' }) }); pollApprovals(); };
   $('#attach').onclick = () => $('#filepick').click();
@@ -956,5 +1048,101 @@ function grow() { const t = $('#input'); t.style.height = 'auto'; t.style.height
   document.addEventListener('drop', (e) => { const c = e.target.closest('[data-c]')?.dataset.c; if (!c) return; e.preventDefault(); up(c, e.dataTransfer.files[0]); });
 })();
 </script>
+<script>
+(() => {
+  if(window.powerDesktop)return;
+  const el = (id) => document.getElementById(id);
+  let opened = false, seen = false, frame, polling = false, connecting = false, lastError = '', commands = Promise.resolve();
+  const status = (text) => { el('bstatus').textContent = text; };
+  async function api(action, args = {}) {
+    const r = await fetch('/api/browser/panel', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({action,args}) });
+    const data = await r.json(); if (!r.ok || data.error) throw new Error(data.error || '浏览器请求失败'); return data;
+  }
+  function command(action, args = {}) {
+    lastError=''; const pageId = frame?.pageId;
+    commands = commands.catch(() => {}).then(async () => {
+      if (!['resume','takeover'].includes(action)) { await api('takeover'); if(frame) frame.manual=true; }
+      return api(action, {pageId,...args});
+    }).catch((e) => {lastError=e.message;status(lastError);});
+    return commands;
+  }
+  async function refresh() {
+    if (!opened || polling || connecting || document.hidden) return;
+    polling = true;
+    try {
+      const view = el('bviewport');
+      const data = await api('frame', {width:view.clientWidth,height:view.clientHeight}); frame = data;
+      el('btake').textContent = data.manual ? '交还控制' : '手动接管';
+      for (const id of ['burl','bback','breload']) el(id).disabled = !data.started;
+      el('bnotice').hidden = !data.blocked;
+      el('bempty').hidden = !!data.started; el('bimage').hidden = !data.started;
+      if (data.started) {
+        el('bimage').src = 'data:image/jpeg;base64,' + data.jpeg;
+        if (document.activeElement !== el('burl')) el('burl').value = data.url;
+        const signature = JSON.stringify(data.tabs);
+        if (el('btabs').dataset.signature !== signature) {
+          el('btabs').dataset.signature = signature; el('btabs').replaceChildren();
+          for (const tab of data.tabs) { const b = document.createElement('button'); b.textContent = tab.title || '新标签页'; b.className = tab.active ? 'active' : ''; b.onclick = () => command('tab', {id:tab.id}); el('btabs').append(b); }
+        }
+      }
+      if(!data.started && !lastError) status(el('bmode').value==='extension' ? '安装扩展后点击「连接」，在 Chrome 中选择允许 Power 使用的标签页。' : '点击「连接」打开浏览器');
+      else if(!lastError) status(data.manual ? '你正在控制 · 点击网页即可输入（支持粘贴和中文）' : '点击网页即可接管操作 · 完成后点击「交还控制」让 Agent 继续');
+    } catch (e) { status(e.message); } finally { polling = false; }
+  }
+  window.openPowerBrowser = async () => {
+    document.body.classList.remove('workspaceopen');
+    opened = true; seen = true; document.body.classList.add('browseropen');
+    const state = await api('status'); el('bmode').value=state.mode;
+    if(state.mode==='managed' || state.started) {await api('start'); await refresh();}
+    else status('点击「连接」，然后在 Chrome 中选择允许 Power 使用的标签页。首次使用请安装扩展。');
+  };
+  el('bmode').onchange = async () => { try {await api('configure',{mode:el('bmode').value});frame=null;await refresh();status('已切换浏览器来源，点击「连接」继续');}catch(e){status(e.message);el('bmode').value=(await api('status')).mode;} };
+  el('bconnect').onclick = async () => {el('bconnect').disabled=true;connecting=true;lastError='';status('正在连接；请在 Chrome 中选择标签页并允许连接…');try{await api('start');connecting=false;await refresh();}catch(e){status(e.message);}finally{connecting=false;el('bconnect').disabled=false;}};
+  el('bdisconnect').onclick = async () => {try{await api('disconnect');frame=null;await refresh();status('已断开连接');}catch(e){status(e.message);}};
+  el('browsert').onclick = () => window.openPowerBrowser().catch((e) => status(e.message));
+  el('bclose').onclick = async () => { await command('resume'); opened = false; document.body.classList.remove('browseropen'); };
+  el('bnew').onclick = async () => { await command('new'); await refresh(); el('burl').focus(); };
+  el('bnative').onclick = () => fetch('/api/browser/show', {method:'POST'}).catch((e) => status(e.message));
+  el('btake').onclick = async () => { await command(frame?.manual ? 'resume' : 'takeover'); await refresh(); };
+  el('bnav').onsubmit = (e) => { e.preventDefault(); let url = el('burl').value.trim(); if (!/^https?:\/\//i.test(url)) url = 'https://' + url; command('navigate', {url}); };
+  el('bback').onclick = () => command('back'); el('breload').onclick = () => command('reload');
+  let pointerStart, dragged=false;
+  el('bimage').ondragstart=(e)=>e.preventDefault();
+  el('bimage').onpointerdown=(e)=>{if(frame?.started){pointerStart={x:e.clientX,y:e.clientY,pageId:frame.pageId};e.target.setPointerCapture(e.pointerId);}};
+  el('bimage').onpointerup=(e)=>{if(!pointerStart)return;const start=pointerStart;pointerStart=null;if(frame?.pageId!==start.pageId)return;
+    if(Math.hypot(e.clientX-start.x,e.clientY-start.y)<5)return;
+    dragged=true;const rect=e.target.getBoundingClientRect();command('drag',{x:(start.x-rect.left)*frame.width/rect.width,y:(start.y-rect.top)*frame.height/rect.height,toX:Math.max(0,(e.clientX-rect.left)*frame.width/rect.width),toY:Math.max(0,(e.clientY-rect.top)*frame.height/rect.height)});
+  };
+  el('bimage').onclick = (e) => {
+    if (dragged) {dragged=false;return;}
+    if (!frame?.started) return;
+    const rect = e.target.getBoundingClientRect();
+    command('click', {x:(e.clientX-rect.left)*frame.width/rect.width,y:(e.clientY-rect.top)*frame.height/rect.height,count:e.detail});
+    el('binput').focus({preventScroll:true});
+  };
+  let wheelX = 0, wheelY = 0, wheelTimer;
+  el('bviewport').addEventListener('wheel', (e) => {
+    if (!frame?.started) return; e.preventDefault(); wheelX += e.deltaX; wheelY += e.deltaY;
+    clearTimeout(wheelTimer); wheelTimer = setTimeout(() => { command('scroll',{x:wheelX,y:wheelY}); wheelX=wheelY=0; },60);
+  },{passive:false});
+  const input = el('binput');
+  input.addEventListener('input', (e) => { if (!e.isComposing && input.value) { command('text',{text:input.value}); input.value=''; } });
+  input.addEventListener('compositionend', () => { if (input.value) { command('text',{text:input.value}); input.value=''; } });
+  input.addEventListener('keydown', (e) => {
+    if (e.isComposing) return;
+    let key = e.key;
+    if ((e.metaKey || e.ctrlKey) && key.toLowerCase() === 'a') key = e.metaKey ? 'Meta+A' : 'Control+A';
+    else if (key === 'Tab' && e.shiftKey) key = 'Shift+Tab';
+    if (['Enter','Tab','Shift+Tab','Backspace','Delete','Escape','ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End','Meta+A','Control+A'].includes(key)) { e.preventDefault(); e.stopPropagation(); command('key',{key}); }
+  });
+  setInterval(async () => {
+    if (opened) return refresh();
+    if (!seen && !document.hidden) try { const d = await api('frame'); if (d.started) { opened=true; seen=true; document.body.classList.add('browseropen'); refresh(); } } catch {}
+  },300);
+})();
+</script>
+<script>window.powerContext=()=>({dir:THREADS.find(t=>t.id===cur)?.dir || META?.settings?.defaultDir || META?.home, char, parent:cur});</script>
+<script src="/workbench.js"></script>
+<script src="/native-browser.js"></script>
 </body>
 </html>

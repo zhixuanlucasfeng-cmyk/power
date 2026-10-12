@@ -55,7 +55,8 @@ PL
 fi
 
 if [ "$1" = app ]; then
-  [ -d "$HOME/Applications/Power.app" ] || "$DIR/mac/build.sh"
+  [ -d "$HOME/Applications/Power.app" ] || (cd "$DIR" && node desktop/build.mjs)
+  "$DIR/power" service ensure
   open "$HOME/Applications/Power.app"; exit 0
 fi
 cd "$POWER_HOME"

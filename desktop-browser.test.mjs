@@ -1,0 +1,27 @@
+import {test} from 'node:test';import assert from 'node:assert/strict';import {spawn} from 'node:child_process';import {mkdtempSync,readFileSync,existsSync,rmSync} from 'node:fs';import {tmpdir} from 'node:os';import {join} from 'node:path';import {createRequire} from 'node:module';import {createServer} from 'node:http';import {createBrowser} from './browser.mjs';
+const require=createRequire(import.meta.url);
+test('embedded Chromium shares real tabs with agent tools without exposing the chat renderer',{skip:!process.env.POWER_TEST_DESKTOP,timeout:90000},async t=>{
+ const home=mkdtempSync(join(tmpdir(),'power-embedded-test-'));
+ const web=createServer((q,r)=>{r.setHeader('Content-Type','text/html');r.end('<title>Embedded browser fixture</title><input aria-label="Name"><button>Apply</button><h1>Ready</h1><script>document.querySelector("button").onclick=()=>{document.querySelector("h1").textContent=document.querySelector("input").value;localStorage.setItem("saved","yes")}</script>');}).listen(0,'127.0.0.1');await new Promise(r=>web.once('listening',r));
+ let log='';const child=spawn(require('electron'),['desktop/main.cjs'],{cwd:process.cwd(),env:{...process.env,POWER_HOME:home,POWER_PORT:String(web.address().port)},stdio:['ignore','pipe','pipe']});child.stderr.on('data',b=>log+=b);child.stdout.on('data',b=>log+=b);
+ const browser=createBrowser({home});
+ t.after(async()=>{await browser.close();child.kill('SIGTERM');await new Promise(r=>{if(child.exitCode!==null||child.signalCode)return r();const timer=setTimeout(()=>{child.kill('SIGKILL');r();},3000);child.once('exit',()=>{clearTimeout(timer);r();});});web.close();rmSync(home,{recursive:true,force:true});});
+ for(let i=0;i<150&&!existsSync(join(home,'desktop-connection.json'));i++)await new Promise(r=>setTimeout(r,100));
+ assert.ok(existsSync(join(home,'desktop-connection.json')),log);
+ const config=JSON.parse(readFileSync(join(home,'desktop-connection.json'),'utf8'));
+ assert.equal((await fetch(config.endpoint,{method:'POST',body:'{}'})).status,401);
+ const rpc=async(action,args={})=>{const r=await fetch(config.endpoint,{method:'POST',headers:{Authorization:`Bearer ${config.token}`},body:JSON.stringify({action,args})});const v=await r.json();assert.ok(r.ok,JSON.stringify(v));return v;};
+ await browser.panel('configure',{mode:'embedded'});await browser.panel('start');
+ let state=await rpc('targets');assert.equal(state.tabs.length,1);assert.equal(state.targets.length,1);
+ const navigate=await browser.call('test','browser_navigate',{url:`http://127.0.0.1:${web.address().port}/page`});assert.ok(!navigate.isError,JSON.stringify(navigate));
+ const fill=await browser.call('test','browser_fill_form',{fields:[{target:'input',name:'Name',type:'textbox',value:'Real embedded browser works'}]});assert.ok(!fill.isError,JSON.stringify(fill));
+ await browser.call('test','browser_click',{target:'button'});
+ assert.match(JSON.stringify(await browser.call('test','browser_snapshot')),/Real embedded browser works/);
+ await browser.call('test','browser_tabs',{action:'new'});state=await rpc('targets');assert.equal(state.tabs.length,2);
+ await browser.call('test','browser_tabs',{action:'select',index:0});state=await rpc('state');assert.equal(state.active,state.tabs[0].id);
+ const tabs=await browser.call('test','browser_tabs',{action:'list'});assert.ok(!JSON.stringify(tabs).includes('(2)'),JSON.stringify(tabs));
+ browser.release('test');
+ await browser.panel('takeover');await browser.panel('new');
+ state=await rpc('state');assert.equal(state.tabs.length,3);assert.equal(state.active,state.tabs[2].id,'New panel tab is selected in the native browser');
+ await browser.close();assert.equal((await rpc('state')).tabs.length,3,'Disconnect preserves native tabs');
+});

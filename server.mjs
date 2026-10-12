@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { openMemory, memoryDir } from './memory.mjs';
+import { POWER_TOOLS } from './power-tools.mjs';
 
 // Power runs Claude Code with cwd = POWER_HOME, so <POWER_HOME>/.claude/skills are its project skills.
 const home = process.env.POWER_HOME || join(homedir(), '.power');
@@ -20,15 +21,20 @@ const instructions = `Long-term memory and self-written skills.
 const server = new McpServer({ name: 'power-memory', version: '0.1.0' }, { instructions });
 const text = (v) => ({ content: [{ type: 'text', text: typeof v === 'string' ? v : JSON.stringify(v, null, 2) }] });
 
-// Send confirmation card: blocks until the user taps 发送 / 取消 in the Power app (or 10 minutes pass).
-server.registerTool('confirm_send', {
-  description: 'Ask the user to approve a message/post before you send it on their behalf. Returns APPROVED or DENIED. Call it with the exact final text; send only if APPROVED.',
-  inputSchema: { platform: z.string().describe('e.g. WeChat, Reddit, email'), recipient: z.string().describe('person, group or place it goes to'), text: z.string().describe('exact text to send') },
-}, async ({ platform, recipient, text: body }) => {
+for (const [name, definition] of Object.entries(POWER_TOOLS)) server.registerTool(name, definition, async (args) => {
   try {
-    const r = await fetch(`http://127.0.0.1:${process.env.POWER_PORT || 4545}/api/approvals`, { method: 'POST', body: JSON.stringify({ thread: process.env.POWER_THREAD, platform, recipient, text: body }) });
-    return text((await r.json()).approved ? 'APPROVED' : 'DENIED');
-  } catch (e) { return { isError: true, ...text(`Power app not reachable (${e.message}); do not send.`) }; }
+    // Interactive terminal mode keeps the original confirmation tool even without a Power turn token.
+    if (name === 'confirm_send' && !process.env.POWER_TOOL_TOKEN) {
+      const r = await fetch(`http://127.0.0.1:${process.env.POWER_PORT || 4545}/api/approvals`, { method: 'POST', body: JSON.stringify({ ...args, thread: process.env.POWER_THREAD }) });
+      return text((await r.json()).approved ? 'APPROVED' : 'DENIED');
+    }
+    if (!process.env.POWER_TOOL_TOKEN) throw new Error('This tool requires an active chat in the Power app.');
+    const r = await fetch(`http://127.0.0.1:${process.env.POWER_PORT || 4545}/api/agent-tools`, {
+      method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${process.env.POWER_TOOL_TOKEN}` }, body: JSON.stringify({ name, args }),
+    });
+    const result = await r.json();
+    return r.ok ? result : { isError: true, ...text(result.error || 'Power tool failed') };
+  } catch (e) { return { isError: true, ...text(e.message) }; }
 });
 
 server.registerTool('memory_save', {

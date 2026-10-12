@@ -8,9 +8,17 @@ import { homedir } from 'node:os';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { openMemory, memoryDir } from './memory.mjs';
-import { ADAPTERS, detect, engineChoices, findBin, isCodexMissingPowerTool, isCodexWriterConflict, sessionForTurn, strip } from './engines.mjs';
+import { ADAPTERS, detect, engineChoices, findBin, historyPrompt, isCodexMissingPowerTool, isCodexWriterConflict, sessionForTurn, strip } from './engines.mjs';
 import { createScheduler } from './schedules.mjs';
 import { createTelegram } from './telegram.mjs';
+import { createBrowser } from './browser.mjs';
+import { createAgentTools } from './agent-tools.mjs';
+import { createIntegrations } from './integrations.mjs';
+import { createArtifacts, scopedFile } from './artifacts.mjs';
+import { createReview } from './review.mjs';
+import { createJobs } from './jobs.mjs';
+import { generateImage, imageStatus } from './image-service.mjs';
+import { POWER_TOOL_NOTE } from './power-tools.mjs';
 
 const DIR = dirname(fileURLToPath(import.meta.url));
 const HOME = process.env.POWER_HOME || join(homedir(), '.power');
@@ -181,7 +189,7 @@ function listSkills() {
 }
 
 const json = (res, code, body) => { res.writeHead(code, { 'content-type': 'application/json' }); res.end(JSON.stringify(body)); };
-const readBody = (req) => new Promise((ok) => { let s = ''; req.on('data', (c) => (s += c)); req.on('end', () => ok(s ? JSON.parse(s) : {})); });
+const readBody = (req) => new Promise((ok,fail) => { let s='',large=false; req.on('data',c=>{if(Buffer.byteLength(s)+c.length>4e6)large=true;else if(!large)s+=c;});req.on('error',fail);req.on('end',()=>{try{if(large)throw Object.assign(new Error('请求超过 4MB'),{status:413});ok(s?JSON.parse(s):{});}catch(e){fail(Object.assign(e,{status:e.status || 400}));}}); });
 
 const display = (c) => (c.name === c.zh ? c.name : `${c.name} (${c.zh})`);
 // Agents without a system-prompt flag get the character's voice inline.
@@ -190,8 +198,7 @@ const voiced = (c, text) => (c.prompt ? `[${voiceText(c)}]\n\n${text}` : text);
 
 // Engines without sessions get the recent conversation inline.
 function withHistory(t, text) {
-  const turns = transcript(t).slice(-12, -1).join('\n\n');
-  return turns ? `Conversation so far:\n${turns}\n\nUser now says: ${text}` : text;
+  return historyPrompt(transcript(t), text);
 }
 
 // Thread events → ["User: …", "Makima (玛奇玛): …"] with each speaker's text joined.
@@ -200,6 +207,10 @@ function transcript(t) {
   let who = 'Assistant';
   for (const e of t.events) {
     if (e.t === 'user') { lines.push(`${userLabel()} (user): ${e.d}`); who = e.char && chars[e.char] ? display(chars[e.char]) : 'Assistant'; }
+    else if (e.t === 'input_request') lines.push(`Power asked the user: ${e.question}`);
+    else if (e.t === 'input_done') lines.push(`${userLabel()} (user): ${e.cancelled ? 'Cancelled the request' : e.answer}`);
+    else if (e.t === 'plan') lines.push(`Task plan: ${e.steps.map((x) => `${x.status}: ${x.step}`).join('; ')}`);
+    else if (e.t === 'artifact') lines.push(`Generated file: ${e.title} (${e.url})`);
     else if (e.t === 'speaker') { who = chars[e.who] ? display(chars[e.who]) : e.who; lines.push(`${who}:`); }
     else if (e.t === 'text' && e.d.trim()) {
       const last = lines.at(-1);
@@ -211,28 +222,29 @@ function transcript(t) {
 }
 
 // Run one turn of one agent. Streams UI events through emit and returns its session/error state.
-function runTurn(t, c, { prompt, session, model, effort, ask, files }, emit, hold) {
+function runTurn(t, c, { prompt, session, model, effort, ask, files, character }, emit, hold) {
   const isClaude = c.engine === 'claude';
   // Automatic recall: relevant notes from the shared 记忆本 ride along with every turn.
   const notes = ask ? mem.recall(ask, 5) : [];
   if (notes.length) prompt = `[Notes from memory that may help:\n${notes.map((n) => `- ${n.content}`).join('\n')}]\n\n${prompt}`;
   const dir = t.dir;
   // Only real model ids reach a CLI; labels like 写代码 mean "the agent's own default".
-  const realModel = isClaude ? model : c.engine === 'ollama' ? c.model : engineChoices()[c.engine]?.some((m) => m.id === model) ? model : undefined;
+  const realModel = isClaude ? model : engineChoices()[c.engine]?.some((m) => m.id === model) ? model : undefined;
   // Codex gets the same tools as the Claude crew: memory, Contract and desktop control, plus network.
   const codexTools = c.engine === 'codex' ? (() => {
-    const k = contractOf(), mcp = { memory: { command: process.execPath, args: [join(DIR, 'server.mjs')], envVars: ['POWER_HOME', 'POWER_PORT', 'POWER_THREAD'] } };
+    const k = contractOf(), mcp = { memory: { command: process.execPath, args: [join(DIR, 'server.mjs')], envVars: ['POWER_HOME', 'POWER_PORT', 'POWER_THREAD', 'POWER_TOOL_TOKEN'], toolTimeoutSec: 1200 } };
     if (k) mcp.contract = { command: process.execPath, args: [k.mcp], envVars: ['CONTRACT_KEY', 'CONTRACT_URL'] };
     if (CUA) mcp.cua = { command: CUA, args: ['mcp'] };
     return { mcp, env: k ? { CONTRACT_KEY: k.key, CONTRACT_URL: k.url } : {} };
   })() : null;
   const toolNote = codexTools ? '\n\nTools you have here: the memory MCP (memory_search / memory_save / skill_save) — search it when past context could matter, save lasting facts the user tells you.' +
-    (CUA ? CUA_NOTE : '') + (contractOf() ? CONTRACT_NOTE : '') + confirmNote() + powerRules() : '';
+    POWER_TOOL_NOTE + (CUA ? CUA_NOTE : '') + (contractOf() ? CONTRACT_NOTE : '') + confirmNote() + powerRules() : '';
+  const cliNote = !isClaude && !codexTools ? POWER_TOOL_NOTE + `\nCall Power tools using your shell: ${JSON.stringify(process.execPath)} ${JSON.stringify(join(DIR, 'tools-cli.mjs'))} list (schemas), then the same command with TOOL_NAME followed by one shell-quoted JSON argument. Do not print POWER_TOOL_TOKEN.` + confirmNote() + powerRules() : '';
   const cmd = ADAPTERS[c.engine].run({
-    prompt: isClaude || c.engine === 'codex' ? prompt : voiced(c, prompt + toolNote), network: !!codexTools, mcp: codexTools?.mcp, persona: !!c.prompt, files, dir, session, model: realModel, effort: realModel ? effort : undefined, template: c.template,
+    prompt: isClaude || c.engine === 'codex' ? prompt : voiced(c, cliNote + '\n\n' + prompt), network: !!codexTools, mcp: codexTools?.mcp, persona: !!c.prompt, files, dir, session, model: realModel, effort: realModel ? effort : undefined, template: c.template,
     cwd: isClaude ? HOME : dir,
     system: c.engine === 'codex' ? (c.prompt ? `${voiceText(c)} Keep this voice in every reply, including when you report tool results or code.` : '') + toolNote
-      : isClaude ? `Your name here is ${display(c)}; introduce yourself by that name (Power is just the app). ` + (c.prompt ?? '') + style() + (vaultOf() ? vaultNote(vaultOf()) : '') + (CUA ? CUA_NOTE : '') + (contractOf() ? CONTRACT_NOTE : '') + `\n\nThe user's working folder is ${dir}. "This folder", "the project" and relative paths mean that folder; use absolute paths under it.` : null,
+      : isClaude ? `Your name here is ${display(c)}; introduce yourself by that name (Power is just the app). ` + (c.prompt ?? '') + style() + POWER_TOOL_NOTE + (vaultOf() ? vaultNote(vaultOf()) : '') + (CUA ? CUA_NOTE : '') + (contractOf() ? CONTRACT_NOTE : '') + `\n\nThe user's working folder is ${dir}. "This folder", "the project" and relative paths mean that folder; use absolute paths under it.` : null,
     extra: isClaude ? ['--plugin-dir', DIR, ...(CLAUDE_MEM ? ['--plugin-dir', CLAUDE_MEM] : []), '--setting-sources', 'project,local', '--permission-mode', 'auto', '--add-dir', dir, '--add-dir', UPLOADS,
       ...(existsSync(MAIN_MEMORY) ? ['--add-dir', MAIN_MEMORY] : []), ...(vaultOf() ? ['--add-dir', vaultOf()] : []), ...((m) => (m ? ['--mcp-config', m] : []))(mcpConfig()), '--chrome'] : [],
   });
@@ -242,15 +254,20 @@ function runTurn(t, c, { prompt, session, model, effort, ask, files }, emit, hol
     const st = {}, started = Date.now();
     let buf = '', stderr = '', plain = '', done = false;
     const out = (e) => { if (e.t === 'done') done = true; emit(e); };
-    const child = spawn(bin, cmd.args, { cwd: cmd.cwd ?? dir, env: { ...process.env, POWER_HOME: HOME, POWER_PORT: String(PORT), POWER_THREAD: t.id, ...(codexTools?.env ?? {}) }, stdio: ['ignore', 'pipe', 'pipe'] });
-    hold(child);
+    const toolSession = agentTools.start({ thread: t.id, char: character ?? t.char, dir, parent:t.parent });
+    const child = spawn(bin, cmd.args, { cwd: cmd.cwd ?? dir, detached: process.platform !== 'win32', env: { ...process.env, POWER_HOME: HOME, POWER_PORT: String(PORT), POWER_THREAD: t.id, POWER_TOOL_TOKEN: toolSession.token, MCP_TOOL_TIMEOUT: '1200000', ...(codexTools?.env ?? {}) }, stdio: ['ignore', 'pipe', 'pipe'] });
+    const terminate = (signal) => { try { if (child.pid && process.platform !== 'win32') process.kill(-child.pid, signal); else child.kill(signal); } catch {} };
+    const active = running.get(t.id);
+    if (active) active.cancelTools = toolSession.close;
+    hold({ kill: terminate });
     // Agents like Hermes print nothing until they finish: send a heartbeat so the UI shows who is working and for how
     // long, and stop a turn that runs past the limit so a group chat never waits forever.
     const limitMs = (Number(loadSettings().turnTimeoutMin) || 10) * 60000;
     let lastOut = Date.now(), timedOut = false;
     const beat = setInterval(() => {
       const ms = Date.now() - started;
-      if (ms > limitMs) { timedOut = true; child.kill('SIGTERM'); setTimeout(() => child.kill('SIGKILL'), 3000); return; }
+      if (ms - toolSession.waitedMs() > limitMs) { timedOut = true; toolSession.close(); terminate('SIGTERM'); setTimeout(() => terminate('SIGKILL'), 3000).unref(); return; }
+      if (toolSession.waiting()) return;
       if (Date.now() - lastOut >= 5000) emit({ t: 'wait', s: Math.round(ms / 1000), who: display(c) });
     }, 5000);
     child.on('error', (e) => { stderr += `启动 ${bin} 失败：${e.message}`; });
@@ -266,6 +283,8 @@ function runTurn(t, c, { prompt, session, model, effort, ask, files }, emit, hol
     });
     child.stderr.on('data', (chunk) => (stderr += chunk));
     child.on('close', (code) => {
+      toolSession.close();
+      if (active?.cancelTools === toolSession.close) delete active.cancelTools;
       clearInterval(beat);
       if (timedOut) { const error = `${display(c)} 超过 ${limitMs / 60000} 分钟还没完成，已停止（可在 ⚙️ 设置里调整上限）`; out({ t: 'done', ms: Date.now() - started, error }); return resolve({ session: null, error }); }
       plain += buf;
@@ -388,13 +407,13 @@ async function runChat(prep, sink = () => {}) {
     else if (e.t === 'text_start') { if (last?.t === 'text') t.events.push({ t: 'text', d: '' }); }
     else if (e.t === 'thinking') { if (last?.t === 'thinking') last.n = e.n; else t.events.push(e); }
     else if (e.t !== 'wait') t.events.push({ ...e }); // heartbeats are live-only
-    if (e.t === 'done' || e.t === 'approval') saveThread(t); // a reload shows everyone who already answered
+    if (['done', 'approval', 'input_request', 'input_done', 'plan', 'artifact', 'job'].includes(e.t)) saveThread(t); // durable UI events survive reload
     try { sink(e); } catch {}
   };
   emit({ t: 'thread', id: t.id, title: t.title, dir: t.dir, members: t.members });
 
   let child = null, stopped = false;
-  running.set(t.id, { kill: () => { stopped = true; child?.kill('SIGINT'); }, emit });
+  running.set(t.id, { kill: () => { stopped = true; jobs.cancelParent(t.id); running.get(t.id)?.cancelTools?.(); child?.kill('SIGINT'); }, emit });
   const hold = (ch) => (child = ch);
   try {
     if (!group) {
@@ -402,7 +421,7 @@ async function runChat(prep, sink = () => {}) {
       const session = a.session ? sessionForTurn(c.engine, t.sessions[char]) : null;
       const prompt = (a.session && session ? text : withHistory(t, text)) + filesNote(files);
       const attemptStart = t.events.length;
-      let result = await runTurn(t, c, { prompt, session, model, effort, ask: text, files }, emit, hold);
+      let result = await runTurn(t, c, { prompt, session, model, effort, ask: text, files, character: char }, emit, hold);
       if (result.writerConflict || (session && result.missingPowerTool)) {
         // Another Codex process owns this saved session. Keep Power's transcript, discard only the
         // unusable engine session id, and retry once with recent context in a fresh Codex thread.
@@ -411,7 +430,7 @@ async function runChat(prep, sink = () => {}) {
         delete t.sessions[char];
         emit({ t: 'wait', s: 0, who: `${display(c)} · 正在恢复会话` });
         const retryPrompt = withHistory(t, text) + filesNote(files);
-        result = await runTurn(t, c, { prompt: retryPrompt, session: null, model, effort, ask: text, files }, emit, hold);
+        result = await runTurn(t, c, { prompt: retryPrompt, session: null, model, effort, ask: text, files, character: char }, emit, hold);
         if (result.missingPowerTool) emit({ t: 'done', error: 'Power 工具仍未加载，请重新发送这条消息' });
       }
       if (result.session && a.session && c.engine !== 'codex') t.sessions[char] = result.session;
@@ -421,7 +440,7 @@ async function runChat(prep, sink = () => {}) {
         const mc = chars[m];
         emit({ t: 'speaker', who: m, model: mc.model, final });
         const prompt = `${groupNote(chars, t.members, m)}\n\nConversation so far:\n${transcript(t).join('\n\n')}${filesNote(files)}\n\n${extra}`;
-        await runTurn(t, mc, { prompt, model: mc.model, effort: mc.effort ?? 'medium', ask: text, files }, emit, hold);
+        await runTurn(t, mc, { prompt, model: mc.model, effort: mc.effort ?? 'medium', ask: text, files, character: m }, emit, hold);
       };
       const tagged = mentions(text, t.members, chars);
       if (tagged.length) {
@@ -462,11 +481,135 @@ async function send(req, res) {
 
 const scheduler = createScheduler({ home: HOME, prepareChat, runChat, running, notify, log: (m) => console.error(m) });
 const telegram = createTelegram({ loadSettings, saveSettings, prepareChat, runChat, allChars, approvals, log: (m) => console.error(m) });
+async function requestApproval(b, signal) {
+  const id = randomUUID().slice(0, 8);
+  const a = { id, thread: b.thread ?? null, platform: String(b.platform ?? ''), recipient: String(b.recipient ?? ''), text: String(b.text ?? ''), at: new Date().toISOString() };
+  if (signal?.aborted) return false;
+  running.get(a.thread)?.emit({ t: 'approval', ...a });
+  notify('Power 需要你确认', `发给 ${a.recipient}（${a.platform}）：${a.text}`);
+  telegram.approval(a);
+  const approved = await new Promise((resolve) => {
+    const finish = (value) => { clearTimeout(timer); signal?.removeEventListener('abort', abort); resolve(value); };
+    const abort = () => finish(false);
+    const timer = setTimeout(abort, 10 * 60000);
+    signal?.addEventListener('abort', abort, { once: true });
+    approvals.set(id, { ...a, ok: finish });
+  });
+  approvals.delete(id);
+  running.get(a.thread)?.emit({ t: 'approval_done', id, approved });
+  return approved;
+}
+const browser = createBrowser({ home: HOME });
+const integrations = createIntegrations({home:HOME,callbackURL:`http://127.0.0.1:${PORT}/api/integrations/oauth/callback`});
+const artifacts = createArtifacts(UPLOADS);
+const review = createReview(HOME);
+const characters = () => Object.entries(allChars()).filter(([,c])=>!c.hidden).map(([id,c])=>({id,name:display(c),engine:c.engine}));
+const jobs = createJobs({home:HOME, stop:(id)=>running.get(id)?.kill(),
+  onUpdate:(job)=>{ const event={t:'job',id:job.id,title:job.title,status:job.status,childThread:job.childThread};
+    if(running.has(job.parent))running.get(job.parent).emit(event);
+    else if(ID_RE.test(job.parent || '') && existsSync(threadFile(job.parent))) {const t=loadThread(job.parent);t.events.push(event);t.updated=new Date().toISOString();if(['completed','failed','cancelled','interrupted'].includes(job.status))t.unread=true;saveThread(t);}
+  },
+  run:async (job,onThread)=>{
+    const prep=prepareChat({char:job.char,dir:job.dir,text:`Task: ${job.title}\n${job.prompt}\n\nThis is an independent Power background task. You are not alone: do not revert other agents' changes. Work only within your assigned responsibility. ${job.isolate ? 'This is an isolated worktree from committed HEAD; keep changes here for review, do not merge or delete it.' : 'This is a shared folder; avoid conflicting edits.'} Do not delegate further.`});
+    prep.t.parent=job.parent;saveThread(prep.t);onThread(prep.t.id);
+    if(job.status==='cancelled')return {error:'Cancelled'};
+    await runChat(prep);
+    const done=prep.t.events.findLast(e=>e.t==='done');
+    return {text:prep.t.events.filter(e=>e.t==='text').map(e=>e.d).join('\n').slice(-20000),error:done?.error};
+  }});
+const imageTasks = new Map();
+const image = (args) => generateImage({bin:AGENTS.find(a=>a.engine==='codex')?.path,outputDir:join(HOME,'generated-images'),...args});
+const agentTools = createAgentTools({ browser, home: HOME, uploads: UPLOADS, scheduler, notify, confirm: requestApproval,
+  integrations, artifacts, image, review, jobs, characters,
+  emit: (thread, event) => running.get(thread)?.emit(event) });
+let shuttingDown = false;
+async function shutdown() {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  jobs.close();
+  for (const run of running.values()) run.kill();
+  const force = setTimeout(() => process.exit(0), 5000);
+  for(const task of imageTasks.values())task.controller?.abort();
+  await integrations.close().catch(()=>{});
+  await browser.close().catch(() => {}); clearTimeout(force); process.exit(0);
+}
+process.on('SIGTERM', shutdown);
+process.on('SIGINT', shutdown);
 
 createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
   const p = url.pathname;
   try {
+    // Prevent websites from driving the local browser or answering human handoff cards.
+    if (p.startsWith('/api/')) {
+      const allowed = `http://127.0.0.1:${PORT}`;
+      if (req.headers.host !== `127.0.0.1:${PORT}` || (req.method === 'POST' && req.headers.origin && req.headers.origin !== allowed)) return json(res, 403, { error: 'Local Power origin required' });
+    }
+    if (p === '/native-browser.js') { res.writeHead(200, {'content-type':'text/javascript; charset=utf-8'});return res.end(readFileSync(join(DIR,'native-browser.js'))); }
+    if (p === '/workbench.js') { res.writeHead(200,{'content-type':'text/javascript; charset=utf-8'});return res.end(readFileSync(join(DIR,'workbench.js'))); }
+    if(p==='/api/integrations/oauth/callback' && req.method==='GET') {
+      await integrations.finishOAuth(url.searchParams.get('state'),url.searchParams.get('code'));
+      res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Content-Security-Policy':"default-src 'none'; style-src 'unsafe-inline'",'Cache-Control':'no-store'});
+      return res.end('<meta charset="utf-8"><title>Power 授权完成</title><p style="font:20px system-ui;padding:40px">授权完成。请返回 Power 工作台，点击测试连接。</p>');
+    }
+    if (p === '/api/integrations' && req.method === 'GET') return json(res,200,{connectors:integrations.list(),image:await imageStatus(AGENTS.find(a=>a.engine==='codex')?.path)});
+    if (p === '/api/integrations' && req.method === 'POST') {
+      const b=await readBody(req);
+      if(b.action==='remove'){await integrations.remove(b.id);return json(res,200,{removed:true});}
+      if(b.action==='test')return json(res,200,{tools:await integrations.tools(b.id)});
+      return json(res,200,await integrations.upsert(b));
+    }
+    if (p === '/api/artifacts' && req.method === 'GET') return json(res,200,artifacts.list());
+    if (p === '/api/artifacts/preview' && req.method === 'POST') return json(res,200,await artifacts.preview((await readBody(req)).id));
+    if (p === '/api/artifacts/save' && req.method === 'POST') {const b=await readBody(req);return json(res,200,artifacts.saveCopy(b.id,b.text));}
+    if (p === '/api/artifacts/media' && req.method === 'GET') {
+      const file=artifacts.fileFor(url.searchParams.get('id'));const ext=file.split('.').pop().toLowerCase();
+      const type={pdf:'application/pdf',mp3:'audio/mpeg',wav:'audio/wav',m4a:'audio/mp4',ogg:'audio/ogg',mp4:'video/mp4',webm:'video/webm'}[ext];
+      if(!type)return json(res,400,{error:'不支持的媒体格式'});
+      res.writeHead(200,{'Content-Type':type,'X-Content-Type-Options':'nosniff','Cache-Control':'no-store'});return res.end(readFileSync(file));
+    }
+    if(p==='/api/review' && req.method==='POST') {
+      const b=await readBody(req);const dir=b.dir || loadSettings().defaultDir || homedir();
+      if(b.action==='comment')return json(res,200,await review.comment(dir,b));
+      if(b.action==='resolve')return json(res,200,await review.resolve(dir,b.id,b.resolved));
+      if(b.action==='attach_pr')return json(res,200,await review.attach(dir,b.url));
+      return json(res,200,await review.snapshot(dir,b.base));
+    }
+    if(p==='/api/jobs' && req.method==='GET')return json(res,200,{jobs:jobs.list(),characters:characters()});
+    if(p==='/api/jobs' && req.method==='POST') {
+      const b=await readBody(req);
+      if(b.action==='cancel')return json(res,200,jobs.cancel(b.id));
+      if(b.action==='remove_worktree')return json(res,200,await jobs.removeWorktree(b.id));
+      const allowed=new Set(characters().map(c=>c.id));
+      if(!b.tasks?.length || b.tasks.some(t=>!allowed.has(t.char || b.char)))return json(res,400,{error:'请选择有效角色'});
+      return json(res,200,await jobs.start({parent:ID_RE.test(b.parent || '')?b.parent:'workbench',dir:b.dir || loadSettings().defaultDir || homedir(),char:b.char,tasks:b.tasks,isolate:b.isolate!==false}));
+    }
+    if(p==='/api/images' && req.method==='GET')return json(res,200,[...imageTasks.values()].map(({controller,...t})=>t));
+    if(p==='/api/images' && req.method==='POST') {
+      const b=await readBody(req);
+      if(b.action==='cancel'){imageTasks.get(b.id)?.controller?.abort();return json(res,200,{cancelled:true});}
+      if([...imageTasks.values()].some(t=>t.status==='running'))return json(res,409,{error:'已有图片任务正在生成'});
+      if(typeof b.prompt!=='string'||!b.prompt.trim()||b.prompt.length>12000)return json(res,400,{error:'请输入图片描述（最多 12000 字符）'});
+      const source=b.sourceId ? artifacts.fileFor(b.sourceId) : undefined;
+      const task={id:randomUUID(),status:'running',created:new Date().toISOString(),controller:new AbortController()}; imageTasks.set(task.id,task);
+      void image({prompt:b.prompt,source,signal:task.controller.signal}).then(result=>{task.artifact=artifacts.add(result.path,'生成图片');task.status='completed';}).catch(e=>{task.status=task.controller.signal.aborted?'cancelled':'failed';task.error=e.message;});
+      return json(res,200,{id:task.id,status:task.status});
+    }
+    if (p === '/api/agent-tools' && req.method === 'POST') {
+      const b = await readBody(req);
+      return json(res, 200, await agentTools.call(String(req.headers.authorization ?? '').replace(/^Bearer /, ''), b.name, b.args));
+    }
+    if (p === '/api/questions' && req.method === 'GET') return json(res, 200, agentTools.listQuestions());
+    if (p.startsWith('/api/questions/') && req.method === 'POST') return json(res, 200, { answered: agentTools.answer(p.slice(15), await readBody(req)) });
+    if (p === '/api/capabilities') return json(res, 200, { browser: browser.status(), nativeTools: ['claude', 'codex'], shellBridge: true, chatOnly: [], desktop: !!CUA, gateway: !!contractOf(), tools: ['browser', 'request_user_input', 'update_plan', 'show_artifact', 'manage_schedule','connector','generate_image','review_workspace','parallel_tasks'] });
+    if (p === '/api/browser/panel' && req.method === 'POST') {
+      res.setHeader('Cache-Control', 'no-store');
+      const b = await readBody(req);
+      return json(res, 200, await browser.panel(b.action, b.args));
+    }
+    if (p === '/api/browser/show' && req.method === 'POST') {
+      try { return json(res, 200, await browser.call('ui', 'show')); } finally { browser.release('ui'); }
+    }
     if (p === '/' ) { res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }); return res.end(readFileSync(join(DIR, 'ui.html'))); }
     if (p === '/api/meta') {
       if (url.searchParams.has('rescan')) AGENTS = detect();
@@ -557,15 +700,7 @@ createServer(async (req, res) => {
     }
     // Send confirmation cards: an agent's confirm_send tool waits here until the user taps 发送 / 取消.
     if (p === '/api/approvals' && req.method === 'POST') {
-      const b = await readBody(req), id = randomUUID().slice(0, 8);
-      const a = { id, thread: b.thread ?? null, platform: String(b.platform ?? ''), recipient: String(b.recipient ?? ''), text: String(b.text ?? ''), at: new Date().toISOString() };
-      running.get(a.thread)?.emit({ t: 'approval', ...a });
-      notify('Power 需要你确认', `发给 ${a.recipient}（${a.platform}）：${a.text}`);
-      telegram.approval(a);
-      const approved = await new Promise((ok) => { approvals.set(id, { ...a, ok }); setTimeout(() => ok(false), 10 * 60000); });
-      approvals.delete(id);
-      running.get(a.thread)?.emit({ t: 'approval_done', id, approved });
-      return json(res, 200, { approved });
+      return json(res, 200, { approved: await requestApproval(await readBody(req)) });
     }
     if (p === '/api/approvals') return json(res, 200, [...approvals.values()].map(({ ok, ...a }) => a));
     if (p.startsWith('/api/approvals/') && req.method === 'POST') {
@@ -575,7 +710,7 @@ createServer(async (req, res) => {
     // Deploys: exit once nothing is running; launchd (or the app) starts the new version.
     if (p === '/api/restart' && req.method === 'POST') {
       json(res, 200, { waiting: running.size });
-      const wait = setInterval(() => { if (!running.size) { clearInterval(wait); process.exit(0); } }, 1000);
+      const wait = setInterval(() => { if (!running.size) { clearInterval(wait); shutdown(); } }, 1000);
       return;
     }
     if (p === '/api/schedules' && req.method === 'POST') return json(res, 200, scheduler.upsert(await readBody(req)));
@@ -618,7 +753,7 @@ createServer(async (req, res) => {
       if (!ID_RE.test(b.id ?? '') || !existsSync(threadFile(b.id))) return json(res, 404, {});
       if (running.has(b.id) && 'dir' in b) return json(res, 409, { error: '还在跑，等它说完再移动' });
       const t = loadThread(b.id);
-      for (const k of ['pinned', 'unread', 'archived']) if (typeof b[k] === 'boolean') t[k] = b[k];
+      for (const k of ['pinned', 'unread', 'archived']) if (typeof b[k] === 'boolean' && !(k === 'unread' && b[k] === false && b.seenUpdated && b.seenUpdated !== t.updated)) t[k] = b[k];
       if (typeof b.dir === 'string') { if (!existsSync(b.dir)) return json(res, 400, { error: `文件夹不存在：${b.dir}` }); t.dir = b.dir; if (t.char) addProject(t.char, b.dir); }
       saveThread(t);
       return json(res, 200, {});
@@ -673,5 +808,5 @@ createServer(async (req, res) => {
     }
     if (p === '/api/forget' && req.method === 'POST') { const { id } = await readBody(req); mem.forget(Number(id)); return json(res, 200, {}); }
     json(res, 404, {});
-  } catch (e) { json(res, 500, { error: String(e.message || e) }); }
+  } catch (e) { json(res, e.status ?? 500, { error: String(e.message || e) }); }
 }).listen(PORT, '127.0.0.1', () => console.log(`Power → http://127.0.0.1:${PORT}`));
