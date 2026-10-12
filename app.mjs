@@ -3,7 +3,7 @@
 import { createServer } from 'node:http';
 import spawn from 'cross-spawn';
 import { readFileSync, writeFileSync, readdirSync, mkdirSync, existsSync, unlinkSync } from 'node:fs';
-import { join, dirname } from 'node:path';
+import { join, dirname, delimiter } from 'node:path';
 import { homedir } from 'node:os';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
@@ -18,10 +18,12 @@ import { createArtifacts, scopedFile } from './artifacts.mjs';
 import { createReview } from './review.mjs';
 import { createJobs } from './jobs.mjs';
 import { generateImage, imageStatus } from './image-service.mjs';
+import { createOnboarding } from './onboarding.mjs';
 import { POWER_TOOL_NOTE } from './power-tools.mjs';
 
 const DIR = dirname(fileURLToPath(import.meta.url));
 const HOME = process.env.POWER_HOME || join(homedir(), '.power');
+process.env.PATH = [join(HOME,'agents','node_modules','.bin'),dirname(process.execPath),process.env.PATH||''].join(delimiter);
 const SKILLS = join(HOME, '.claude', 'skills');
 const THREADS = join(HOME, 'threads');
 const UPLOADS = join(HOME, 'uploads');
@@ -523,10 +525,12 @@ const image = (args) => generateImage({bin:AGENTS.find(a=>a.engine==='codex')?.p
 const agentTools = createAgentTools({ browser, home: HOME, uploads: UPLOADS, scheduler, notify, confirm: requestApproval,
   integrations, artifacts, image, review, jobs, characters,
   emit: (thread, event) => running.get(thread)?.emit(event) });
+const onboarding=createOnboarding({home:HOME,root:DIR});
 let shuttingDown = false;
 async function shutdown() {
   if (shuttingDown) return;
   shuttingDown = true;
+  onboarding.cancel();
   jobs.close();
   for (const run of running.values()) run.kill();
   const force = setTimeout(() => process.exit(0), 5000);
@@ -545,6 +549,19 @@ createServer(async (req, res) => {
     if (p.startsWith('/api/')) {
       const allowed = `http://127.0.0.1:${PORT}`;
       if (req.headers.host !== `127.0.0.1:${PORT}` || (req.method === 'POST' && req.headers.origin && req.headers.origin !== allowed)) return json(res, 403, { error: 'Local Power origin required' });
+    }
+    if(p==='/onboarding.js'){res.writeHead(200,{'content-type':'text/javascript; charset=utf-8'});return res.end(readFileSync(join(DIR,'onboarding.js')));}
+    if(p==='/api/onboarding'){
+      res.setHeader('Cache-Control','no-store');
+      if(req.method==='GET')return json(res,200,{...await onboarding.status(),needed:!loadSettings().onboardingComplete&&!readdirSync(THREADS).some(f=>f.endsWith('.json'))});
+      if(req.method!=='POST')return json(res,405,{});
+      const b=await readBody(req);
+      if(b.action==='complete'){
+        if(!onboarding.verified||!(await onboarding.status()).authenticated)throw new Error('请先登录并通过测试连接');
+        const st=loadSettings();st.onboardingComplete=true;saveSettings(st);AGENTS=detect();
+        return json(res,200,{char:Object.entries(allChars()).find(([,c])=>c.engine==='codex'&&!c.hidden)?.[0]});
+      }
+      return json(res,200,b.action==='cancel'?onboarding.cancel():await onboarding.start(b.action));
     }
     if (p === '/native-browser.js') { res.writeHead(200, {'content-type':'text/javascript; charset=utf-8'});return res.end(readFileSync(join(DIR,'native-browser.js'))); }
     if (p === '/workbench.js') { res.writeHead(200,{'content-type':'text/javascript; charset=utf-8'});return res.end(readFileSync(join(DIR,'workbench.js'))); }

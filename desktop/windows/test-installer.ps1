@@ -16,6 +16,17 @@ try {
   if (!(Test-Path $bridge)) { throw 'Installed desktop did not start' }
   $meta = Invoke-WebRequest 'http://127.0.0.1:14546/api/meta'
   if ($meta.StatusCode -ne 200) { throw 'Installed server unavailable' }
+  if (!(Test-Path "$installDir\npm\bin\npm-cli.js")) { throw 'Bundled npm is missing' }
+  $setupStatus = Invoke-RestMethod 'http://127.0.0.1:14546/api/onboarding'
+  if (!$setupStatus.needed) { throw 'First-run setup was not offered' }
+  Invoke-RestMethod 'http://127.0.0.1:14546/api/onboarding' -Method Post -ContentType 'application/json' -Body '{"action":"install"}' | Out-Null
+  for ($i=0; $i -lt 180; $i++) {
+    Start-Sleep -Seconds 2
+    $setupStatus = Invoke-RestMethod 'http://127.0.0.1:14546/api/onboarding'
+    if ($setupStatus.job.status -ne 'running') { break }
+  }
+  if ($setupStatus.job.status -ne 'completed' -or !$setupStatus.installed) { throw "Codex installation failed: $($setupStatus.job.output)" }
+  if ($setupStatus.authenticated -or $setupStatus.verified) { throw 'Fresh install incorrectly claims login or verification' }
   $config = Get-Content $bridge -Raw | ConvertFrom-Json
   $tab = Invoke-RestMethod $config.endpoint -Method Post -Headers @{Authorization="Bearer $($config.token)"} -ContentType 'application/json' -Body '{"action":"new","args":{"url":"about:blank"}}'
   if (!$tab.id) { throw 'Installed browser could not create a tab' }

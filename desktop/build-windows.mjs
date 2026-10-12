@@ -10,6 +10,9 @@ const electron=createRequire(import.meta.url)('electron');
 mkdirSync(out,{recursive:true});
 cpSync(dirname(electron),join(out,'runtime'),{recursive:true});
 cpSync(process.execPath,join(out,'node.exe'));
+const npmRoot=dirname(dirname(process.env.npm_execpath||''));
+if(!existsSync(join(npmRoot,'bin/npm-cli.js')))throw new Error('Run the Windows build through npm run windows:build');
+cpSync(npmRoot,join(out,'npm'),{recursive:true});
 const source=join(out,'resources','power');
 mkdirSync(source,{recursive:true});
 for(const name of readdirSync(root)){

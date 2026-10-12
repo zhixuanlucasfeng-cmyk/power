@@ -1,4 +1,4 @@
-const {app,BrowserWindow,WebContentsView,ipcMain,dialog,Menu,session,webContents}=require('electron');
+const {app,BrowserWindow,WebContentsView,ipcMain,dialog,Menu,session,webContents,shell}=require('electron');
 const {join}=require('node:path');const {homedir}=require('node:os');const fs=require('node:fs');const {randomUUID}=require('node:crypto');const {createServer}=require('node:http');
 const {webURL,bounds}=require('./policy.cjs');
 const home=process.env.POWER_HOME||join(homedir(),'.power');
@@ -30,6 +30,7 @@ function addTab(url='about:blank'){
 async function action(name,args={}){
  const wc=tabs.get(active)?.webContents;
  switch(name){
+ case 'openLogin':{const u=new URL(args.url);if(u.protocol!=='https:'||!['auth.openai.com','auth0.openai.com','chatgpt.com','openai.com'].includes(u.hostname)||u.username||u.password)throw new Error('Invalid login URL');await shell.openExternal(u.href);return {};}
  case 'state':return state();
  case 'automation':automating=!!args.active;return {};
  case 'show':shown=true;if(!tabs.size)addTab();layout();emit();return state();

@@ -15,7 +15,7 @@ jobs:
           node-version: 22
       - run: npm ci
       - name: Test desktop and shared browser tabs
-        run: node --test desktop.test.mjs desktop-browser.test.mjs
+        run: node --test onboarding.test.mjs desktop.test.mjs desktop-browser.test.mjs
         env:
           POWER_TEST_DESKTOP: '1'
       - run: npm run windows:build
