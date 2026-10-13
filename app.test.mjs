@@ -225,6 +225,14 @@ test('right-click actions: pin, unread, archive, fork, delete', async () => {
 });
 
 test('workbench: preview/save copy, connectors, malformed JSON and background jobs work through HTTP', async () => {
+  const content=await api('/api/content',{action:'create',title:'Video draft'});
+  assert.equal((await api('/api/content')).current,content.id);
+  await api('/api/content',{action:'write',id:content.id,field:'article',text:'# Article'});
+  assert.equal((await api('/api/content',{action:'read',id:content.id})).article,'# Article');
+  const media=await fetch(url+'/api/content/upload',{method:'POST',headers:{'x-content-id':content.id,'x-content-kind':'video','x-filename':'clip.mp4'},body:'video-bytes'});
+  assert.equal(media.status,200);
+  const part=await fetch(url+`/api/content/media?id=${content.id}&name=video.mp4`,{headers:{Range:'bytes=0-4'}});
+  assert.equal(part.status,206);assert.equal(await part.text(),'video');
   const upload = await fetch(url+'/api/upload',{method:'POST',headers:{'x-filename':'interactive.html'},body:'<button onclick="this.textContent=1">0</button>'});
   const added=await upload.json(),id=decodeURIComponent(added.url.split('/').pop());
   const preview=await api('/api/artifacts/preview',{id});assert.equal(preview.editable,true);assert.match(preview.html,/<button/);

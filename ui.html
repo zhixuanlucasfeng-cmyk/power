@@ -245,6 +245,7 @@
   #wbbody {flex:1;overflow:auto;padding:16px;min-height:0;}
   #workbench label {display:block;margin:12px 0;}#workbench input:not([type=checkbox]),#workbench textarea,#workbench select{background:#090b16;color:var(--text);border:1px solid var(--line);padding:9px;border-radius:8px;font:inherit;max-width:100%;}#workbench label>input:not([type=checkbox]),#workbench label>textarea{display:block;width:100%;margin-top:5px}#workbench textarea{width:100%;min-height:70px;resize:vertical}#workbench input[type=checkbox]{width:auto;}
   #workbench article{padding:14px;border:1px solid var(--line);border-radius:10px;margin:12px 0;overflow-wrap:anywhere}#workbench small{display:block;color:var(--dim);margin:5px 0}#workbench pre{white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.6 var(--mono)}.wbfile{display:block;text-align:left;width:100%;margin:8px 0}.wbbutton{display:inline-block;border:1px solid var(--line);padding:8px;cursor:pointer}.wbthumb{max-width:100%;max-height:340px}
+  #workbench video{max-width:100%;max-height:320px}#workbench .wbrow article{margin:4px;min-width:90px;text-align:center}
   #wbpreview{height:calc(100% - 65px);min-height:400px;margin-top:14px}#wbpreview iframe{width:100%;height:100%;min-height:400px;background:white;border:0;border-radius:8px}#wbpreview img,#wbpreview video{max-width:100%}#wbpreview #wbedit{height:100%;font:13px/1.6 var(--mono)}#workbench [hidden]{display:none!important;}
   #wbdiff{overflow:auto;border:1px solid var(--line);margin:14px 0}.wbdiff{display:flex;min-width:max-content;font:12px/1.7 var(--mono)}.wbdiff code{white-space:pre}.wbdiff.add{background:#133321}.wbdiff.del{background:#401d29}.wbdiff button,.wblineno{display:inline-block;width:45px;flex-shrink:0;border:0;padding:0;font:inherit;border-radius:0;color:#999}.wbdiff button{cursor:pointer}
   @media(max-width:1200px){body.workspaceopen{grid-template-columns:minmax(300px,1fr) minmax(420px,1fr)}body.workspaceopen aside{display:none}}
@@ -408,7 +409,7 @@ function render(e) {
 
 function hero() {
   turn = null; $('#chat').onclick = $('#chat').onchange = null;
-  $('#chat').innerHTML = `<div class="hero"><h1><img class="herologo" src="/avatar/logo" alt="POWER" onerror="this.outerHTML=\'POWER\'"></h1><p>选一个人上场，或者开个群聊让几个 Agent 一起想。Claude 角色共用记忆和技能；其他分组是这台电脑上检测到的别的 Agent。<br><small>把图片拖到头像上，或双击头像，就能换成你自己的图</small></p><div class="cards">` +
+  $('#chat').innerHTML = `<div class="hero"><h1><img class="herologo" src="/avatar/logo" alt="POWER" onerror="this.outerHTML=\'POWER\'"></h1><p>${esc(META?.settings?.slogan || '选一个人上场，或者开个群聊让几个 Agent 一起想。')}</p><div class="cards">` +
     visible().map(([k, c]) => `<div class="card ${k === char ? 'on' : ''}" data-c="${k}" style="--k:${look(k).k}">${badge(k)}<b>${esc(nm(k))}</b><small>${c.role} · ${esc(modelName(c.model))}</small></div>`).join('') +
     `</div></div>`;
 }
@@ -624,6 +625,8 @@ function settingsPage() {
   $('#chat').innerHTML = `<div class="settings">
     <h2>通用</h2>
     <div class="scard">
+      <div class="srow"><div class="sinfo"><b>工作台标识</b><small>左上角和欢迎页的 Logo</small></div><label class="wbbutton">上传 Logo<input id="slogo" type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden></label></div>
+      <div class="srow"><div class="sinfo"><b>欢迎页标语</b><small>留空使用 Power 默认文字</small></div><input id="sslogan" value="${esc(st.slogan||'')}" maxlength="160" placeholder="写下你的内容工作台标语"></div>
       <div class="srow"><div class="sinfo"><b>默认工作文件夹</b><small>新对话默认在这里读写文件</small></div><button id="sdir">📁 ${esc(st.defaultDir ? short(st.defaultDir) : '~ 主目录')}</button>${st.defaultDir ? '<button class="mini" id="sdirx">恢复默认</button>' : ''}</div>
       <div class="srow"><div class="sinfo"><b>角色包</b><small>personas/ 里的 JSON；也可以把自己的放进 ~/.power/personas/</small></div><select id="spack">${Object.entries(META.packs).map(([k, n]) => `<option value="${esc(k)}" ${k === (st.personaPack || 'default') ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select></div>
       <div class="srow"><div class="sinfo"><b>你的称呼</b><small>角色们怎么叫你；留空就不特别称呼</small></div><input id="sname" value="${esc(st.userName || '')}" placeholder="比如：老板" style="padding:6px 10px;border-radius:8px;border:1px solid var(--line);background:#06070f;color:var(--text);font:inherit;width:160px"></div>
@@ -701,6 +704,8 @@ function settingsPage() {
     const el = e.target;
     if (el.id === 'spack') { await saveSetting({ personaPack: el.value }); META = await (await fetch('/api/meta')).json(); char = ''; settingsPage(); return; }
     if (el.id === 'sname') { await saveSetting({ userName: el.value }); return; }
+    if (el.id === 'sslogan') { await saveSetting({ slogan: el.value }); return; }
+    if (el.id === 'slogo') { const file=el.files[0];if(!file)return;const r=await fetch('/avatar/logo',{method:'POST',headers:{'Content-Type':file.type},body:file});if(!r.ok){alert((await r.json()).error);return;}document.querySelectorAll('.logo img').forEach(img=>img.src='/avatar/logo?t='+Date.now());return; }
     if (el.id === 'slimit') { await saveSetting({ turnTimeoutMin: Number(el.value) }); return; }
     if (el.id === 'slang') { await saveSetting({ language: el.value }); location.reload(); return; }
     if (el.id === 'sc-type') { const every = el.value === 'every'; $('#sc-time').hidden = every; $('#sc-min').hidden = $('#sc-unit').hidden = !every; return; }

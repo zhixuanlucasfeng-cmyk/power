@@ -17,6 +17,7 @@
 - **Desktop apps (optional).** With [Cua Driver](https://github.com/trycua/cua) installed, Claude characters can operate Mac apps in the background.
 - **@ and auto-routing in groups.** `@Name` gets only that member; otherwise a router picks the best lead (plus at most two helpers) from the team rules, so not everyone repeats each other. "Everyone takes a turn" mode is still there.
 - **Attachments.** Paste, drop or 📎 images and files; Claude reads them by path, Codex gets images (`-i`), opencode gets files (`-f`).
+- **Content workbench.** Map a local content folder, preview video, edit scripts/subtitles/articles, transcribe locally, and let agents use the selected content as context. [Setup and limits](docs/content-workbench.md).
 - **Scheduled tasks.** "Every day at 08:00, have Nayuta summarize my unread WeChat"; you get a notification with the result.
 - **Phone (Telegram).** Pair a bot you create with @BotFather; message the crew from your phone, and tap Send/Cancel on confirmation cards there.
 - **Send confirmation cards.** Before an agent sends a message or post for you it calls `confirm_send`; a card pops up in the app (and on your phone) and nothing goes out until you tap Send.

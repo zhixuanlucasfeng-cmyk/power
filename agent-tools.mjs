@@ -5,7 +5,7 @@ import { parseTool } from './power-tools.mjs';
 import { scopedFile } from './artifacts.mjs';
 import { cleanJunk, findFiles, openFile, systemCheck, tidyFolder } from './pc-tools.mjs';
 
-export function createAgentTools({ browser, home, uploads, scheduler, emit, notify, confirm, integrations, artifacts, image, review, jobs, characters }) {
+export function createAgentTools({ browser, home, uploads, scheduler, emit, notify, confirm, integrations, artifacts, image, review, jobs, characters, content }) {
   const sessions = new Map(), questions = new Map();
   const text = (value) => ({ content: [{ type: 'text', text: JSON.stringify(value) }] });
   const publicQuestion = ({ resolve, timer, session, ...q }) => q;
@@ -45,6 +45,22 @@ export function createAgentTools({ browser, home, uploads, scheduler, emit, noti
       const s = sessions.get(token);
       if (!s) throw Object.assign(new Error('Power tool session expired or missing'), { status: 401 });
       const args = parseTool(name, input);
+      if (name === 'content') {
+        if (!content) throw new Error('内容工作台未启用');
+        if (args.action === 'list') return text(content.list());
+        if (args.action === 'create') return text(content.create(args.title));
+        if (args.action === 'select') return text(content.select(args.id));
+        const item = args.id ? content.detail(args.id) : content.current();
+        if (args.action === 'current' || args.action === 'read') return text(item ? {...item,script:item.script.slice(0,50000),subtitles:item.subtitles.slice(0,50000),article:item.article.slice(0,50000)} : null);
+        if (!item) throw new Error('先在「内容」Tab 选择一条内容');
+        if (args.action === 'write') return text(content.write(item.id,args.field,args.text));
+        if (args.action === 'attach_cover') return text(content.attach(item.id,scopedFile(args.source,[s.dir,uploads,join(home,'generated-images')],25e6),'cover'));
+        if (args.action === 'transcribe') return text(content.transcribe(item.id));
+        if (args.action === 'sync') {
+          const approved=await confirm({thread:s.thread,platform:'内容同步',recipient:item.title,text:`将 ${item.dir} 交给已配置的本地同步脚本。脚本可能发布到外部平台。`},s.controller.signal);
+          return text(approved?content.sync(item.id):{cancelled:true});
+        }
+      }
       if (name === 'connector') {
         if (args.action === 'list') return text(integrations.list().map(({id,name,type,status,enabled})=>({id,name,type,status,enabled})));
         if (!args.id) throw new Error('请指定连接器 id');

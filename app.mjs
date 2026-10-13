@@ -2,8 +2,8 @@
 // (Claude Code with your own subscription login, Codex, opencode, Hermes, ...). Binds to 127.0.0.1 only.
 import { createServer } from 'node:http';
 import spawn from 'cross-spawn';
-import { readFileSync, writeFileSync, readdirSync, mkdirSync, existsSync, unlinkSync } from 'node:fs';
-import { join, dirname, delimiter } from 'node:path';
+import { createReadStream, readFileSync, writeFileSync, readdirSync, mkdirSync, existsSync, unlinkSync, statSync } from 'node:fs';
+import { join, dirname, delimiter, isAbsolute } from 'node:path';
 import { homedir } from 'node:os';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
@@ -19,6 +19,7 @@ import { createReview } from './review.mjs';
 import { createJobs } from './jobs.mjs';
 import { generateImage, imageStatus } from './image-service.mjs';
 import { createOnboarding } from './onboarding.mjs';
+import { createContentStudio } from './content-studio.mjs';
 import { POWER_TOOL_NOTE } from './power-tools.mjs';
 
 const DIR = dirname(fileURLToPath(import.meta.url));
@@ -122,7 +123,7 @@ let AGENTS = detect();
 
 // Settings (⚙️ in the app): which agents to show, custom agents, defaults.
 const SETTINGS = join(HOME, 'settings.json');
-const DEFAULTS = { hidden: [], custom: {}, defaultDir: null, vault: null, personaPack: 'default', userName: '', turnTimeoutMin: 10, charGroups: {}, charPrompts: {}, teamPrompt: '', notify: true, sendConfirm: true, language: 'zh', rain: true, enterToSend: true, memOpen: false };
+const DEFAULTS = { hidden: [], custom: {}, defaultDir: null, contentDir: null, contentSyncCommand: '', slogan: '', vault: null, personaPack: 'default', userName: '', turnTimeoutMin: 10, charGroups: {}, charPrompts: {}, teamPrompt: '', notify: true, sendConfirm: true, language: 'zh', rain: true, enterToSend: true, memOpen: false };
 const publicSettings = (s) => ({ ...s, contract: s.contract ? { url: s.contract.url, connected: !!s.contract.key } : null, telegram: undefined });
 const loadSettings = () => { try { return { ...DEFAULTS, ...JSON.parse(readFileSync(SETTINGS, 'utf8')) }; } catch { return { ...DEFAULTS }; } };
 const saveSettings = (s) => writeFileSync(SETTINGS, JSON.stringify(s, null, 1));
@@ -230,6 +231,7 @@ function runTurn(t, c, { prompt, session, model, effort, ask, files, character }
   const notes = ask ? mem.recall(ask, 5) : [];
   if (notes.length) prompt = `[Notes from memory that may help:\n${notes.map((n) => `- ${n.content}`).join('\n')}]\n\n${prompt}`;
   const dir = t.dir;
+  const contentHint = content.current() ? '\nA content item is selected in the Power Content tab. For requests about the current video, script, subtitles, article or cover, call content(action="current") before editing.' : '';
   // Only real model ids reach a CLI; labels like 写代码 mean "the agent's own default".
   const realModel = isClaude ? model : engineChoices()[c.engine]?.some((m) => m.id === model) ? model : undefined;
   // Codex gets the same tools as the Claude crew: memory, Contract and desktop control, plus network.
@@ -240,13 +242,13 @@ function runTurn(t, c, { prompt, session, model, effort, ask, files, character }
     return { mcp, env: k ? { CONTRACT_KEY: k.key, CONTRACT_URL: k.url } : {} };
   })() : null;
   const toolNote = codexTools ? '\n\nTools you have here: the memory MCP (memory_search / memory_save / skill_save) — search it when past context could matter, save lasting facts the user tells you.' +
-    POWER_TOOL_NOTE + (CUA ? CUA_NOTE : '') + (contractOf() ? CONTRACT_NOTE : '') + confirmNote() + powerRules() : '';
-  const cliNote = !isClaude && !codexTools ? POWER_TOOL_NOTE + `\nCall Power tools using your shell: ${JSON.stringify(process.execPath)} ${JSON.stringify(join(DIR, 'tools-cli.mjs'))} list (schemas), then the same command with TOOL_NAME followed by one shell-quoted JSON argument. Do not print POWER_TOOL_TOKEN.` + confirmNote() + powerRules() : '';
+    POWER_TOOL_NOTE + contentHint + (CUA ? CUA_NOTE : '') + (contractOf() ? CONTRACT_NOTE : '') + confirmNote() + powerRules() : '';
+  const cliNote = !isClaude && !codexTools ? POWER_TOOL_NOTE + contentHint + `\nCall Power tools using your shell: ${JSON.stringify(process.execPath)} ${JSON.stringify(join(DIR, 'tools-cli.mjs'))} list (schemas), then the same command with TOOL_NAME followed by one shell-quoted JSON argument. Do not print POWER_TOOL_TOKEN.` + confirmNote() + powerRules() : '';
   const cmd = ADAPTERS[c.engine].run({
     prompt: isClaude || c.engine === 'codex' ? prompt : voiced(c, cliNote + '\n\n' + prompt), network: !!codexTools, mcp: codexTools?.mcp, persona: !!c.prompt, files, dir, session, model: realModel, effort: realModel ? effort : undefined, template: c.template,
     cwd: isClaude ? HOME : dir,
     system: c.engine === 'codex' ? (c.prompt ? `${voiceText(c)} Keep this voice in every reply, including when you report tool results or code.` : '') + toolNote
-      : isClaude ? `Your name here is ${display(c)}; introduce yourself by that name (Power is just the app). ` + (c.prompt ?? '') + style() + POWER_TOOL_NOTE + (vaultOf() ? vaultNote(vaultOf()) : '') + (CUA ? CUA_NOTE : '') + (contractOf() ? CONTRACT_NOTE : '') + `\n\nThe user's working folder is ${dir}. "This folder", "the project" and relative paths mean that folder; use absolute paths under it.` : null,
+      : isClaude ? `Your name here is ${display(c)}; introduce yourself by that name (Power is just the app). ` + (c.prompt ?? '') + style() + POWER_TOOL_NOTE + contentHint + (vaultOf() ? vaultNote(vaultOf()) : '') + (CUA ? CUA_NOTE : '') + (contractOf() ? CONTRACT_NOTE : '') + `\n\nThe user's working folder is ${dir}. "This folder", "the project" and relative paths mean that folder; use absolute paths under it.` : null,
     extra: isClaude ? ['--plugin-dir', DIR, ...(CLAUDE_MEM ? ['--plugin-dir', CLAUDE_MEM] : []), '--setting-sources', 'project,local', '--permission-mode', 'auto', '--add-dir', dir, '--add-dir', UPLOADS,
       ...(existsSync(MAIN_MEMORY) ? ['--add-dir', MAIN_MEMORY] : []), ...(vaultOf() ? ['--add-dir', vaultOf()] : []), ...((m) => (m ? ['--mcp-config', m] : []))(mcpConfig()), '--chrome'] : [],
   });
@@ -503,6 +505,7 @@ async function requestApproval(b, signal) {
   return approved;
 }
 const browser = createBrowser({ home: HOME });
+const content = createContentStudio({home:HOME,getRoot:()=>loadSettings().contentDir||join(HOME,'content'),getSync:()=>loadSettings().contentSyncCommand});
 const integrations = createIntegrations({home:HOME,callbackURL:`http://127.0.0.1:${PORT}/api/integrations/oauth/callback`});
 const artifacts = createArtifacts(UPLOADS);
 const review = createReview(HOME);
@@ -523,7 +526,7 @@ const jobs = createJobs({home:HOME, stop:(id)=>running.get(id)?.kill(),
 const imageTasks = new Map();
 const image = (args) => generateImage({bin:AGENTS.find(a=>a.engine==='codex')?.path,outputDir:join(HOME,'generated-images'),...args});
 const agentTools = createAgentTools({ browser, home: HOME, uploads: UPLOADS, scheduler, notify, confirm: requestApproval,
-  integrations, artifacts, image, review, jobs, characters,
+  integrations, artifacts, image, review, jobs, characters, content,
   emit: (thread, event) => running.get(thread)?.emit(event) });
 const onboarding=createOnboarding({home:HOME,root:DIR});
 let shuttingDown = false;
@@ -578,6 +581,28 @@ createServer(async (req, res) => {
       return json(res,200,await integrations.upsert(b));
     }
     if (p === '/api/artifacts' && req.method === 'GET') return json(res,200,artifacts.list());
+    if (p === '/api/content' && req.method === 'GET') return json(res,200,{root:content.root(),items:content.list(),current:content.current()?.id||null,tasks:content.tasks(),syncConfigured:!!loadSettings().contentSyncCommand});
+    if (p === '/api/content' && req.method === 'POST') {
+      const b=await readBody(req);
+      if(b.action==='create')return json(res,200,content.create(b.title));
+      if(b.action==='select')return json(res,200,content.select(b.id));
+      if(b.action==='read')return json(res,200,content.detail(b.id));
+      if(b.action==='write')return json(res,200,content.write(b.id,b.field,b.text));
+      if(b.action==='attach_cover')return json(res,200,content.attach(b.id,artifacts.fileFor(b.artifactId),'cover'));
+      if(b.action==='transcribe')return json(res,200,content.transcribe(b.id));
+      if(b.action==='sync')return json(res,200,content.sync(b.id));
+      return json(res,400,{error:'未知内容操作'});
+    }
+    if (p === '/api/content/upload' && req.method === 'POST') return json(res,200,await content.upload(String(req.headers['x-content-id']||''),String(req.headers['x-content-kind']||''),decodeURIComponent(String(req.headers['x-filename']||'')),req));
+    if (p === '/api/content/media' && req.method === 'GET') {
+      const file=content.media(url.searchParams.get('id'),url.searchParams.get('name'));
+      const ext=file.split('.').pop().toLowerCase(),type={mp4:'video/mp4',webm:'video/webm',mov:'video/quicktime',m4v:'video/mp4',mp3:'audio/mpeg',wav:'audio/wav',m4a:'audio/mp4',ogg:'audio/ogg',flac:'audio/flac',png:'image/png',jpg:'image/jpeg',jpeg:'image/jpeg',webp:'image/webp'}[ext];
+      const size=statSync(file).size,match=/^bytes=(\d+)-(\d*)$/.exec(req.headers.range||'');
+      let start=match?Number(match[1]):0,end=match&&match[2]?Number(match[2]):size-1;
+      if(start>=size||end<start||end>=size){res.writeHead(416,{'Content-Range':`bytes */${size}`});return res.end();}
+      res.writeHead(match?206:200,{'Content-Type':type,'Content-Length':end-start+1,'Accept-Ranges':'bytes','Cache-Control':'no-store','X-Content-Type-Options':'nosniff',...(match?{'Content-Range':`bytes ${start}-${end}/${size}`}:{})});
+      return createReadStream(file,{start,end}).pipe(res);
+    }
     if (p === '/api/artifacts/preview' && req.method === 'POST') return json(res,200,await artifacts.preview((await readBody(req)).id));
     if (p === '/api/artifacts/save' && req.method === 'POST') {const b=await readBody(req);return json(res,200,artifacts.saveCopy(b.id,b.text));}
     if (p === '/api/artifacts/media' && req.method === 'GET') {
@@ -619,7 +644,7 @@ createServer(async (req, res) => {
     }
     if (p === '/api/questions' && req.method === 'GET') return json(res, 200, agentTools.listQuestions());
     if (p.startsWith('/api/questions/') && req.method === 'POST') return json(res, 200, { answered: agentTools.answer(p.slice(15), await readBody(req)) });
-    if (p === '/api/capabilities') return json(res, 200, { browser: browser.status(), nativeTools: ['claude', 'codex'], shellBridge: true, chatOnly: [], desktop: !!CUA, gateway: !!contractOf(), tools: ['browser', 'request_user_input', 'update_plan', 'show_artifact', 'manage_schedule','connector','generate_image','review_workspace','parallel_tasks'] });
+    if (p === '/api/capabilities') return json(res, 200, { browser: browser.status(), nativeTools: ['claude', 'codex'], shellBridge: true, chatOnly: [], desktop: !!CUA, gateway: !!contractOf(), tools: ['browser', 'request_user_input', 'update_plan', 'show_artifact', 'manage_schedule','connector','generate_image','review_workspace','parallel_tasks','content'] });
     if (p === '/api/browser/panel' && req.method === 'POST') {
       res.setHeader('Cache-Control', 'no-store');
       const b = await readBody(req);
@@ -656,6 +681,9 @@ createServer(async (req, res) => {
       const b = await readBody(req), st = loadSettings();
       if (Array.isArray(b.hidden)) st.hidden = b.hidden.filter((k) => typeof k === 'string');
       if ('defaultDir' in b) { if (b.defaultDir && !existsSync(b.defaultDir)) return json(res, 400, { error: `文件夹不存在：${b.defaultDir}` }); st.defaultDir = b.defaultDir || null; }
+      if ('contentDir' in b) { if (b.contentDir && (!existsSync(b.contentDir)||!statSync(b.contentDir).isDirectory())) return json(res,400,{error:'内容目录不存在'});st.contentDir=b.contentDir||null; }
+      if ('contentSyncCommand' in b) {if(b.contentSyncCommand && (!isAbsolute(b.contentSyncCommand)||!existsSync(b.contentSyncCommand)||!statSync(b.contentSyncCommand).isFile()))return json(res,400,{error:'同步脚本需要存在的文件绝对路径'});st.contentSyncCommand=b.contentSyncCommand||'';}
+      if (typeof b.slogan === 'string') st.slogan=b.slogan.trim().slice(0,160);
       for (const k of ['rain', 'enterToSend', 'memOpen', 'notify', 'sendConfirm']) if (typeof b[k] === 'boolean') st[k] = b[k];
       if (['zh', 'en'].includes(b.language)) st.language = b.language;
       if (Number(b.turnTimeoutMin) > 0) st.turnTimeoutMin = Math.min(Number(b.turnTimeoutMin), 120);
