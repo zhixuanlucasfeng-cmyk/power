@@ -4,7 +4,7 @@ Windows x64 uses the same Electron desktop and shared browser tabs as macOS.
 
 ## Download and launch
 
-Download **Power-Setup-x64.exe** from the [Windows installer release](https://github.com/zhixuanlucasfeng-cmyk/power/releases/tag/v0.4.0-windows-preview.3). This is a public download. Development builds are also available as artifacts of successful [Windows builds](https://github.com/zhixuanlucasfeng-cmyk/power/actions/workflows/windows.yml); those artifact downloads require GitHub sign-in.
+Download **Power-Setup-x64.exe** from the [Windows installer release](https://github.com/zhixuanlucasfeng-cmyk/power/releases/tag/v0.4.0-windows-preview.4). This is a public download. Development builds are also available as artifacts of successful [Windows builds](https://github.com/zhixuanlucasfeng-cmyk/power/actions/workflows/windows.yml); those artifact downloads require GitHub sign-in.
 
 Run the installer, then open **Power** from the Start menu or desktop shortcut. Installation is per-user and does not require administrator access. The package includes Node and Electron. Uninstall Power through Windows Settings; chats and browser sessions are retained. The optional portable ZIP can still be extracted and launched with **Power.exe** or **Power.cmd**. The launcher starts the local Power server, opens the desktop and stops its server when the app exits. Background schedules therefore require keeping Power running. This preview installer is unsigned; Windows may display an unknown-publisher warning.
 
