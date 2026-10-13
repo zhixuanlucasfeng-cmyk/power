@@ -8,7 +8,7 @@
 
 ## 能做什么
 
-- **可见浏览器和登录接管：** Codex / Claude 可打开网页、查看页面、填写表单、操作标签页、上传下载和截图。桌面 App 的右侧内嵌真实浏览器，支持「+」新标签页；登录后点「交还 Agent」，如有登录确认卡片再回答。桌面浏览器登录状态保存在 `~/.power/desktop`。
+- **可见浏览器和登录接管：** Codex / Claude 可打开网页、查看页面、填写表单、操作标签页、上传下载和截图。桌面 App 的右侧内嵌真实浏览器，支持「+」新标签页；登录后点「交还 Agent」。要沿用 Chrome 中已有的 Google 登录，可在右侧选择「我的 Chrome · 已有登录」，安装扩展并授权标签页。内置浏览器的独立登录状态保存在 `~/.power/desktop`。
 - **任务交互与结果：** Agent 可以提出带选项的问题、显示任务清单、展示生成文件，以及通过对话管理定时任务。具体支持范围和安装说明见 [能力对照](docs/capabilities.md)。
 
 - **自动找到本机所有 Agent：** 启动时扫描 Claude Code、Codex、opencode、Hermes、pi、Gemini CLI、Qwen Code、Cursor Agent、Copilot CLI、Auggie、Amp、Goose、Crush、Aider、OpenClaw。找到就出现在侧边栏，直接能用。其他"收一句话、打印回答"的命令行工具，可以在设置里手动加。
