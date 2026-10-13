@@ -6,7 +6,7 @@
   const labels = {queued:'排队中',starting:'准备中',running:'运行中',completed:'已完成',failed:'失败',cancelled:'已取消',interrupted:'已中断'};
   let tab='overview', opened=false, preview, snapshot, sourceShown=false, contentId=null;
   const pane=document.createElement('section');pane.id='workbench';pane.setAttribute('aria-label','Power 工作台');
-  pane.innerHTML='<div class="wbhead"><b>内容创作工作台</b><button id="wbclose" aria-label="收起工作台">✕</button></div><nav id="wbnav"><button data-tab="overview">概览</button><button data-tab="content">内容</button><button data-tab="files">文件与预览</button><button data-tab="images">图片</button><button data-tab="review">代码审查</button><button data-tab="jobs">并行任务</button><button data-tab="connections">连接器</button></nav><div id="wbstatus" role="status"></div><div id="wbbody"></div>';
+  pane.innerHTML='<div class="wbhead"><b>内容创作工作台</b><button id="wbclose" aria-label="收起工作台">✕</button></div><nav id="wbnav"><button data-tab="overview">概览</button><button data-tab="content">内容</button><button data-tab="platforms">发布平台</button><button data-tab="files">文件与预览</button><button data-tab="images">图片</button><button data-tab="review">代码审查</button><button data-tab="jobs">并行任务</button><button data-tab="connections">连接器</button></nav><div id="wbstatus" role="status"></div><div id="wbbody"></div>';
   document.body.append(pane);
   const button=document.createElement('button');button.textContent='▣ 工作台';button.id='workbencht';button.onclick=()=>window.openPowerWorkbench();$('.ctl').append(button);
   const status=(s)=>{$('#wbstatus').textContent=s || '';};
@@ -17,7 +17,7 @@
   window.openPowerWorkbench=(next)=>open(next).catch(e=>status(e.message));
   $('#wbclose').onclick=()=>{opened=false;document.body.classList.remove('workspaceopen');};
   $('#wbnav').onclick=action(async(e)=>{if(e.target.dataset.tab){tab=e.target.dataset.tab;preview=null;await render();}});
-  async function render(){status('');for(const b of $('#wbnav').children)b.classList.toggle('active',b.dataset.tab===tab);const body=$('#wbbody');body.innerHTML='<p class="dim">正在加载…</p>';if(tab==='overview')await overview();if(tab==='content')await content();if(tab==='files')await files();if(tab==='connections')await connections();if(tab==='images')await images();if(tab==='review')await review();if(tab==='jobs')await jobs();}
+  async function render(){status('');for(const b of $('#wbnav').children)b.classList.toggle('active',b.dataset.tab===tab);const body=$('#wbbody');body.innerHTML='<p class="dim">正在加载…</p>';if(tab==='overview')await overview();if(tab==='content')await content();if(tab==='platforms')await platforms();if(tab==='files')await files();if(tab==='connections')await connections();if(tab==='images')await images();if(tab==='review')await review();if(tab==='jobs')await jobs();}
   async function overview(){const d=await api('content'),current=d.items.find(x=>x.id===d.current);$('#wbbody').innerHTML=`<h3>概览</h3><p class="dim">本地内容目录：${esc(d.root)}</p><div class="wbrow"><article><b>${d.items.length}</b><small>条内容</small></article><article><b>${d.items.filter(x=>x.assets.video).length}</b><small>个视频</small></article><article><b>${d.items.filter(x=>x.assets.cover).length}</b><small>张封面</small></article></div><article><b>当前内容</b><p>${current?esc(current.title):'尚未选择'}</p><button id="overview-open">打开内容</button></article><article><b>本地同步</b><p>${d.syncConfigured?'已配置本地同步脚本':'尚未配置；在「内容」页填写脚本绝对路径。'}</p><button id="overview-sync" ${current&&d.syncConfigured?'':'disabled'}>同步当前内容</button></article><h3>最近任务</h3>${d.tasks.slice(-8).reverse().map(t=>`<article><b>${esc(t.kind==='sync'?'同步':'字幕转写')} · ${esc(labels[t.status]||t.status)}</b><small>${esc(t.created)}</small>${t.error?`<p>${esc(t.error)}</p>`:''}</article>`).join('')||'<p>暂无任务。</p>'}`;$('#overview-open').onclick=action(async()=>{tab='content';await (current?showContent(current.id):content());});$('#overview-sync').onclick=action(async()=>{if(!current||!confirm('运行你配置的本地同步脚本？脚本可能发布到外部平台。'))return;await api('content',{action:'sync',id:current.id});await overview();});}
   async function content(){contentId=null;const [d,settings]=await Promise.all([api('content'),api('settings')]);$('#wbbody').innerHTML=`<h3>内容</h3><p class="dim">每条内容是本地目录。选择后，Agent 可用 Current Content 工具读取脚本、字幕和文章。</p><form id="content-folder"><label>内容目录<input name="dir" value="${esc(settings.contentDir||d.root)}" required></label><button type="button" id="content-pick">选择文件夹</button> <button>映射目录</button></form><form id="content-sync-setup"><label>本地同步脚本（可选，接收内容目录作为参数）<input name="command" value="${esc(settings.contentSyncCommand||'')}" placeholder="/绝对路径/同步脚本"></label><button>保存同步配置</button></form><form id="content-create"><label>新内容标题<input name="title" required maxlength="120" placeholder="例如：新一期视频"></label><button>创建内容</button></form><div id="content-list">${d.items.map(item=>`<button class="wbfile" data-content="${esc(item.id)}"><b>${esc(item.title)}</b><small>${esc(item.status)} · ${esc(item.updated.slice(0,10))}${item.id===d.current?' · 当前内容':''}</small></button>`).join('')||'<p>还没有内容。创建一条，或映射已有内容目录。</p>'}</div>`;
     $('#content-folder').onsubmit=action(async e=>{e.preventDefault();await api('settings',{contentDir:e.target.elements.dir.value.trim()});await content();});
@@ -32,6 +32,29 @@
     $('#content-transcribe').onclick=action(async()=>{await api('content',{action:'transcribe',id});status('正在本机转写，完成后点击内容重新打开。');});
     $('#content-sync').onclick=action(async()=>{if(!confirm('运行你配置的本地同步脚本？脚本可能发布到外部平台。'))return;await api('content',{action:'sync',id});status('同步任务已启动。');});
     $('#wbbody').onclick=action(async e=>{const save=e.target.closest('[data-content-save]'),ask=e.target.closest('[data-content-ask]');if(save){await api('content',{action:'write',id,field:save.dataset.contentSave,text:$('#content-'+save.dataset.contentSave).value});status('已保存。');}if(ask){const prompts={script:'读取当前内容并创作视频脚本，完成后用 content 工具保存到 script。',article:'读取当前内容的脚本和字幕，写成文章，完成后用 content 工具保存到 article。',cover:'读取当前内容，调用 generate_image 生成适合的封面，再用 content attach_cover 保存。'};const input=document.querySelector('#input');if(!context().char)throw new Error('先在左侧选择 Agent');input.value=prompts[ask.dataset.contentAsk];input.focus();status('已将任务放进聊天输入框，按发送即可。');}});
+  }
+  const socialSites={youtube:{name:'YouTube',url:'https://studio.youtube.com/'},tiktok:{name:'TikTok',url:'https://www.tiktok.com/upload'},instagram:{name:'Instagram',url:'https://www.instagram.com/'}};
+  function askAgent(prompt){if(!context().char)throw new Error('先在左侧选择 Agent');const input=$('#input');input.value=prompt;input.dispatchEvent(new Event('input',{bubbles:true}));input.focus();status('任务已放进聊天输入框；发送后 Agent 会在同一个浏览器会话中操作。');}
+  async function openPlatform(url){
+    await window.openPowerBrowser();
+    const state=await api('browser/panel',{action:'status'});
+    if(state.mode==='embedded'&&window.powerDesktop){await window.powerDesktop.invoke('new',{url});return;}
+    await api('browser/panel',{action:'start'});
+    await api('browser/panel',{action:'takeover'});
+    await api('browser/panel',{action:'new'});
+    const frame=await api('browser/panel',{action:'frame'});
+    await api('browser/panel',{action:'navigate',args:{pageId:frame.pageId,url}});
+  }
+  async function platforms(){
+    const d=await api('content'),current=d.items.find(item=>item.id===d.current);
+    $('#wbbody').innerHTML=`<h3>发布平台</h3><p class="dim">在 Power 浏览器或「我的 Chrome · 已有登录」中登录。账号密码留在网站；Agent 使用同一标签页。登录后记得点「交还 Agent」。</p><p>当前内容：${current?esc(current.title):'尚未选择；先到「内容」页选择一条。'}</p>${Object.entries(socialSites).map(([key,site])=>`<article><b>${site.name}</b><small>登录状态需在网站内检查；Power 不会读取或保存密码。</small><button data-platform-open="${key}">打开并登录</button> <button data-platform-check="${key}">让 Agent 检查登录</button> <button data-platform-publish="${key}" ${current?'':'disabled'}>让 Agent 发布当前内容</button></article>`).join('')}<p class="dim">发布由 Agent 在可见网页中完成。正式提交前会弹出确认卡；平台页面限制、验证码或拒绝访问时需要你手动处理。</p>`;
+    $('#wbbody').onclick=action(async e=>{
+      const button=e.target.closest('[data-platform-open],[data-platform-check],[data-platform-publish]');if(!button)return;
+      const key=button.dataset.platformOpen||button.dataset.platformCheck||button.dataset.platformPublish,site=socialSites[key];if(!site)return;
+      if(button.dataset.platformOpen){await openPlatform(site.url);return;}
+      if(button.dataset.platformCheck){askAgent(`请用 Power 的 browser 工具检查当前 ${site.name} 标签页是否已登录，告诉我当前账号/频道；如果没有登录，打开 ${site.url} 并让我在浏览器里亲自登录。不要索要密码，也不要声称未经验证的账号已连接。`);return;}
+      askAgent(`请用 content(action="current") 读取我在 Power 工作台选中的内容，并使用 Power 的共享 browser 工具在 ${site.name} 发布。先检查已登录的账号/频道是否正确；如需登录，让我在浏览器中完成。根据内容准备标题、说明和媒体，缺少必要媒体时先告诉我。正式点击发布前，用 confirm_send 展示目标账号和最终文案，得到批准后才发布。完成后检查页面结果并给我作品链接；若网站阻止操作，明确报告，不要绕过限制。`);
+    });
   }
   function artifactButton(a){return `<button class="wbfile" data-preview="${esc(a.id)}"><b>${esc(a.title)}</b><small>${Math.round(a.size/1024)} KB</small></button>`;}
   async function files(){const items=await api('artifacts');$('#wbbody').innerHTML='<p class="dim">聊天附件和生成文件。支持 PDF、Office 内容、图片、音视频，以及交互 HTML。</p><label class="wbbutton">添加文件<input id="wbfilepick" type="file" hidden></label><div id="wbfiles">'+(items.map(artifactButton).join('') || '<p>暂无文件。可让 Agent 生成报告，并调用 show_artifact 展示。</p>')+'</div>';
