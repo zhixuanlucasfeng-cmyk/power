@@ -10,7 +10,7 @@ Run the installer, then open **Power** from the Start menu or desktop shortcut. 
 
 On first launch, follow **Install → Sign in → Test → Start chatting** to install official Codex and connect your own ChatGPT account. No terminal or separate npm installation is needed. If browser sign-in fails, choose the device-code fallback. The test sends one short model request using your account allowance. Reopen the wizard with **配置 Agent / Setup**. Power does not include a subscription; other agent CLIs still require separate installation and login. Native Windows `.exe`, `.cmd` and `.bat` agent commands are detected on PATH. WSL-only CLIs are not automatically bridged into the Windows app.
 
-Use **Browser → +** to open a tab. Log in directly on the website, then return control to the agent. Browser sessions stay in `%USERPROFILE%\.power\desktop`; app data stays in `%USERPROFILE%\.power`. These are separate from normal Chrome logins.
+Use **Browser → +** to open a tab. Log in directly on the website, then return control to the agent. Browser sessions stay in `%USERPROFILE%\.power\desktop`; app data stays in `%USERPROFILE%\.power`. To reuse sites already signed in through Google in your normal Chrome, select **My Chrome · Existing logins**, install the linked Playwright extension, then connect and approve the tabs Power may use. Power and the agent use those approved Chrome tabs without copying passwords or cookies. The embedded browser keeps its own separate login session.
 
 ## Run from source
 

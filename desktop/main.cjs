@@ -31,6 +31,7 @@ async function action(name,args={}){
  const wc=tabs.get(active)?.webContents;
  switch(name){
  case 'openLogin':{const u=new URL(args.url);if(u.protocol!=='https:'||!['auth.openai.com','auth0.openai.com','chatgpt.com','openai.com'].includes(u.hostname)||u.username||u.password)throw new Error('Invalid login URL');await shell.openExternal(u.href);return {};}
+ case 'openChromeExtension':await shell.openExternal('https://chromewebstore.google.com/detail/playwright-extension/mmlmfjhmonkocbjadbfplnigmagldckm');return {};
  case 'state':return state();
  case 'automation':automating=!!args.active;return {};
  case 'show':shown=true;if(!tabs.size)addTab();layout();emit();return state();
@@ -81,7 +82,7 @@ app.whenReady().then(async()=>{
    const {action:name,args}=JSON.parse(body||'{}');
    const result=name==='targets'?await targetState():await action(name,args);res.end(JSON.stringify(result));
   }catch(e){res.writeHead(400);res.end(JSON.stringify({error:e.message}));}
- }).listen(0,'127.0.0.1',()=>{fs.writeFileSync(endpointFile+'.tmp',JSON.stringify({pid:process.pid,cdp,endpoint:`http://127.0.0.1:${server.address().port}`,token}),{mode:0o600});fs.renameSync(endpointFile+'.tmp',endpointFile);void fetch(base+'/api/browser/panel',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'configure',args:{mode:'embedded'}})}).catch(console.error);});
+ }).listen(0,'127.0.0.1',()=>{fs.writeFileSync(endpointFile+'.tmp',JSON.stringify({pid:process.pid,cdp,endpoint:`http://127.0.0.1:${server.address().port}`,token}),{mode:0o600});fs.renameSync(endpointFile+'.tmp',endpointFile);if(!fs.existsSync(join(home,'browser-connection.json')))void fetch(base+'/api/browser/panel',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'configure',args:{mode:'embedded'}})}).catch(console.error);});
 });
 app.on('before-quit',()=>{try{if(JSON.parse(fs.readFileSync(endpointFile,'utf8')).pid===process.pid)fs.unlinkSync(endpointFile);}catch{}for(const v of tabs.values())if(!v.webContents.isDestroyed())v.webContents.close({waitForBeforeUnload:false});server?.closeAllConnections();server?.close();});
 app.on('window-all-closed',()=>app.quit());

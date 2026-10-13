@@ -1051,7 +1051,7 @@ function grow() { const t = $('#input'); t.style.height = 'auto'; t.style.height
 </script>
 <script>
 (() => {
-  if(window.powerDesktop)return;
+  if(window.powerDesktop && !['extension','managed'].includes(localStorage.getItem('powerBrowserMode')))return;
   const el = (id) => document.getElementById(id);
   let opened = false, seen = false, frame, polling = false, connecting = false, lastError = '', commands = Promise.resolve();
   const status = (text) => { el('bstatus').textContent = text; };
@@ -1093,11 +1093,14 @@ function grow() { const t = $('#input'); t.style.height = 'auto'; t.style.height
   window.openPowerBrowser = async () => {
     document.body.classList.remove('workspaceopen');
     opened = true; seen = true; document.body.classList.add('browseropen');
-    const state = await api('status'); el('bmode').value=state.mode;
+    const state = await api('status');
+    if(window.powerDesktop && localStorage.getItem('powerBrowserMode')!==state.mode){localStorage.setItem('powerBrowserMode',state.mode);sessionStorage.setItem('powerBrowserOpen','1');location.reload();return;}
+    el('bmode').value=state.mode;
     if(state.mode==='managed' || state.mode==='embedded' || state.started) {await api('start'); await refresh();}
     else status('点击「连接」，然后在 Chrome 中选择允许 Power 使用的标签页。首次使用请安装扩展。');
   };
-  el('bmode').onchange = async () => { try {await api('configure',{mode:el('bmode').value});frame=null;await refresh();status('已切换浏览器来源，点击「连接」继续');}catch(e){status(e.message);el('bmode').value=(await api('status')).mode;} };
+  el('bmode').onchange = async () => { try {const mode=el('bmode').value;await api('configure',{mode});if(window.powerDesktop){localStorage.setItem('powerBrowserMode',mode);sessionStorage.setItem('powerBrowserOpen','1');await window.powerDesktop.invoke('hide');location.reload();return;}frame=null;await refresh();status('已切换浏览器来源，点击「连接」继续');}catch(e){status(e.message);el('bmode').value=(await api('status')).mode;} };
+  if(window.powerDesktop){window.powerDesktop.invoke('hide').catch(()=>{});el('browserpanel').querySelector('a[href^="https://chromewebstore.google.com/"]').onclick=e=>{e.preventDefault();window.powerDesktop.invoke('openChromeExtension').catch(error=>status(error.message));};}
   el('bconnect').onclick = async () => {el('bconnect').disabled=true;connecting=true;lastError='';status(el('bmode').value==='extension'?'正在连接；请在 Chrome 中选择标签页并允许连接…':'正在连接浏览器…');try{await api('start');connecting=false;await refresh();}catch(e){status(e.message);}finally{connecting=false;el('bconnect').disabled=false;}};
   el('bdisconnect').onclick = async () => {try{await api('disconnect');frame=null;await refresh();status('已断开连接');}catch(e){status(e.message);}};
   el('browsert').onclick = () => window.openPowerBrowser().catch((e) => status(e.message));
@@ -1140,6 +1143,7 @@ function grow() { const t = $('#input'); t.style.height = 'auto'; t.style.height
     if (opened) return refresh();
     if (!seen && !document.hidden) try { const d = await api('frame'); if (d.started) { opened=true; seen=true; document.body.classList.add('browseropen'); refresh(); } } catch {}
   },300);
+  if(window.powerDesktop && sessionStorage.getItem('powerBrowserOpen')){sessionStorage.removeItem('powerBrowserOpen');window.openPowerBrowser().catch(e=>status(e.message));}
 })();
 </script>
 <script>window.powerContext=()=>({dir:THREADS.find(t=>t.id===cur)?.dir || META?.settings?.defaultDir || META?.home, char, parent:cur});</script>
