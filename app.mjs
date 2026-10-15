@@ -2,7 +2,7 @@
 // (Claude Code with your own subscription login, Codex, opencode, Hermes, ...). Binds to 127.0.0.1 only.
 import { createServer } from 'node:http';
 import spawn from 'cross-spawn';
-import { createReadStream, readFileSync, writeFileSync, readdirSync, mkdirSync, existsSync, unlinkSync, statSync } from 'node:fs';
+import { createReadStream, readFileSync, writeFileSync, readdirSync, mkdirSync, existsSync, unlinkSync, statSync, appendFileSync } from 'node:fs';
 import { join, dirname, delimiter, isAbsolute } from 'node:path';
 import { homedir } from 'node:os';
 import { randomUUID } from 'node:crypto';
@@ -297,6 +297,8 @@ function runTurn(t, c, { prompt, session, model, effort, ask, files, character }
       const writerConflict = c.engine === 'codex' && !!session && isCodexWriterConflict(error);
       const missingPowerTool = c.engine === 'codex' && isCodexMissingPowerTool(st.text);
       if (!done && !writerConflict && !missingPowerTool) out({ t: 'done', ms: Date.now() - started, error });
+      // Ledger of engine session ids, so claude-usage can count Codex/Hermes/opencode tokens as Power's.
+      if (st.session) try { appendFileSync(join(HOME, 'sessions.jsonl'), JSON.stringify({ ts: new Date().toISOString(), engine: c.engine, session: st.session }) + '\n'); } catch {}
       resolve({ session: st.session ?? null, error, writerConflict, missingPowerTool });
     });
   });
