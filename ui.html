@@ -319,7 +319,20 @@ let group = null; // { members, rounds } while in a group chat
 const open_ = new Set((() => { try { return JSON.parse(localStorage.getItem('open')) || []; } catch { return []; } })());
 const prefs = (() => { try { return JSON.parse(localStorage.getItem('prefs')) || {}; } catch { return {}; } })();
 let av = Date.now(); // bump to reload pictures after an upload
-const badge = (c, sm) => `<span class="badge${sm ? ' sm' : ''}" style="--k:${look(c).k}">${look(c).g}<img src="/avatar/${c}?v=${av}" alt="" onerror="this.remove()"></span>`;
+const badge = (c, sm) => `<span class="badge${sm ? ' sm' : ''}" style="--k:${look(c).k}">${look(c).g}<img src="/avatar/${c}?v=${av}" alt="" onload="this.hidden=false" onerror="retryAvatar(this)"></span>`;
+// A transient image failure must not permanently erase the portrait.
+function retryAvatar(img) {
+  img.hidden = true;
+  const attempt = Number(img.dataset.retry || 0);
+  if (attempt >= 2) return; // Missing portraits keep their text fallback; never loop.
+  img.dataset.retry = String(attempt + 1);
+  setTimeout(() => {
+    if (!img.isConnected) return;
+    const url = new URL(img.src);
+    url.searchParams.set('retry', String(attempt + 1));
+    img.src = url.href;
+  }, 400 * (attempt + 1));
+}
 const modelName = (m) => META.models[m] || m;
 const nm = (c) => { const x = META.chars[c]; return !x ? c : x.name === x.zh ? x.name : `${x.name} (${x.zh})`; };
 function look(c) {
